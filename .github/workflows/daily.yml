@@ -2,7 +2,7 @@ name: QART Daily Dashboard Auto Update
 
 on:
   schedule:
-    # 📌 매일 월~금 한국 시간 오전 8시 50분 자동 실행 (UTC 기준 23시 50분)
+    # 매일 월~금 한국 시간 오전 8시 50분 자동 실행 (UTC 기준 23시 50분)
     - cron: '50 23 * * 0-4'
   workflow_dispatch: # 수동 실행 버튼 활성화
 
@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -33,8 +33,8 @@ jobs:
 
       - name: Commit & Push index.html
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
           git add index.html
-          git commit -m "Auto update dashboard [skip ci]" || exit 0
-          git push
+          git commit -m "Auto update dashboard: $(date +'%Y-%m-%d %H:%M')" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }}
