@@ -10,7 +10,7 @@ from jira import JIRA
 # ==========================================
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "2942",  # 8월 QART 스프린트 ID
+    "QART_SPRINT": "6643",  # 8월 QART 스프린트 ID
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
