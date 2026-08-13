@@ -14,7 +14,8 @@ CONFIG = {
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
-JIRA_TOKEN = 'ATATT3xFfGF0g-MfjTn9cTsYHuDs26ys4FrJ5qXyHa3Vz7tQiKxDlSZRJAEVKSxPI8BHc30MAoMeYQADK7k_lM3NaQOdFygved2KurOGCvUwJ4KrISLK9AX0LRJrydMC8R4ravl30fOoz0NTSOtcgEQHPY4pTmXR2dU8gLjt5i72KkJ4uRbgEfc=17FD9AEC'  # 발급받은 개인 API 토큰 입력
+# 📌 깃허브 보안 비밀키(Secrets)에서 지라 토큰을 안전하게 불러옵니다.
+JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
 
 # 커스텀 필드 ID 후보군
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
