@@ -10,14 +10,13 @@ from jira import JIRA
 # ==========================================
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",  # 📌 실제 QART 스프린트 ID 반영
+    "QART_SPRINT": "6643",
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
 
-# 커스텀 필드 ID 후보군
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
 DEPLOY_DATE_FIELDS = ['customfield_10170', 'customfield_10203', 'customfield_10336']
@@ -25,9 +24,6 @@ DEPLOY_DATE_FIELDS = ['customfield_10170', 'customfield_10203', 'customfield_103
 DONE_STATUSES = ['QA 완료', '배포 완료', 'QA 완료(배포완료)', 'Done', 'Closed', 'Resolved']
 WEEKDAY_KOR = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
 
-# ==========================================
-# 2. 날짜 파싱 및 커스텀 필드 추출 함수
-# ==========================================
 def get_field_value(issue_fields, field_id_list):
     for fid in field_id_list:
         val = getattr(issue_fields, fid, None)
@@ -46,26 +42,38 @@ def parse_date(date_str):
     except Exception:
         return None
 
-# ==========================================
-# 3. Jira 데이터 추출 로직
-# ==========================================
 def get_team_dashboard_data():
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
     
-    # 📌 스프린트 ID (6643) 지정 JQL
-    jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
-    print(f"🔍 실행 JQL: {jql}")
-    
-    issues = jira.enhanced_search_issues(jql, maxResults=False)
-    print(f"📊 지라에서 조회된 총 이슈 개수: {len(issues)}개")
+    # 📌 진단 1: QART 프로젝트 전체 이슈 조회 테스트
+    jql_test1 = 'project = "QART" ORDER BY created DESC'
+    print(f"🔍 [진단 1] JQL: {jql_test1}")
+    issues_test1 = jira.enhanced_search_issues(jql_test1, maxResults=50)
+    print(f"📊 QART 프로젝트 전체 검색 결과: {len(issues_test1)}개")
 
-    # 만약 지정한 스프린트 ID로 조회가 안 될 경우 활성 스프린트 전체 검색 시도 (안전 장치)
-    if len(issues) == 0:
-        jql_fallback = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
-        print(f"⚠️ 스프린트 {CONFIG['QART_SPRINT']} 조회 결과 0건. openSprints JQL 재시도: {jql_fallback}")
-        issues = jira.enhanced_search_issues(jql_fallback, maxResults=False)
-        print(f"📊 openSprints로 조회된 이슈 개수: {len(issues)}개")
-    
+    # 📌 진단 2: 스프린트 ID 단독 조회 테스트
+    jql_test2 = f'sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
+    print(f"🔍 [진단 2] JQL: {jql_test2}")
+    issues_test2 = jira.enhanced_search_issues(jql_test2, maxResults=False)
+    print(f"📊 Sprint {CONFIG['QART_SPRINT']} 단독 검색 결과: {len(issues_test2)}개")
+
+    # 📌 진단 3: openSprints 조회 테스트
+    jql_test3 = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
+    print(f"🔍 [진단 3] JQL: {jql_test3}")
+    issues_test3 = jira.enhanced_search_issues(jql_test3, maxResults=False)
+    print(f"📊 openSprints() 검색 결과: {len(issues_test3)}개")
+
+    # 최종 채택할 이슈 목록 (스프린트 6643 우선, 없으면 openSprints, 없으면 QART 전체)
+    if len(issues_test2) > 0:
+        issues = issues_test2
+        print(f"✅ [선택] Sprint {CONFIG['QART_SPRINT']} 데이터 {len(issues)}건으로 생성 진행")
+    elif len(issues_test3) > 0:
+        issues = issues_test3
+        print(f"✅ [선택] openSprints() 데이터 {len(issues)}건으로 생성 진행")
+    else:
+        issues = issues_test1
+        print(f"⚠️ [대체] QART 최근 데이터 {len(issues)}건으로 생성 진행")
+
     today = datetime.now().date()
     tomorrow = today + timedelta(days=1)
     this_week_end = today + timedelta(days=(6 - today.weekday()))
@@ -105,15 +113,12 @@ def get_team_dashboard_data():
             'link': f"{JIRA_SERVER}/browse/{i.key}"
         }
         
-        # 1. 오늘 배포 예정 (배포일 기준)
         if deploy_date and deploy_date == today:
             team_data[assignee]['today_deploy'].append(issue_info)
 
         is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
 
-        # 완료된 이슈는 배포 예정 이외의 섹션에서는 차단
         if not is_done:
-            # 2. 오늘 진행 중
             is_today_progress = False
             if start_date and due_date and (start_date <= today <= due_date):
                 is_today_progress = True
@@ -123,7 +128,6 @@ def get_team_dashboard_data():
             if is_today_progress:
                 team_data[assignee]['today_progress'].append(issue_info)
 
-            # 3. 내일 진행 예정
             is_tomorrow = False
             if start_date == tomorrow or due_date == tomorrow:
                 is_tomorrow = True
@@ -133,7 +137,6 @@ def get_team_dashboard_data():
             if is_tomorrow:
                 team_data[assignee]['tomorrow_plan'].append(issue_info)
 
-            # 4. 다음 주 예정 업무
             is_next_week = False
             if (start_date and start_date >= next_week_start) or (due_date and due_date >= next_week_start):
                 is_next_week = True
@@ -141,7 +144,6 @@ def get_team_dashboard_data():
             if is_next_week:
                 team_data[assignee]['next_week'].append(issue_info)
 
-            # 5. 시작일/기한 미정 업무
             if not start_date and not due_date and not deploy_date:
                 team_data[assignee]['no_date'].append(issue_info)
             elif not is_today_progress and not is_tomorrow and not is_next_week and (deploy_date != today):
@@ -151,9 +153,6 @@ def get_team_dashboard_data():
 
     return team_data, today, tomorrow, next_week_start
 
-# ==========================================
-# 4. HTML 팀 대시보드 생성 로직
-# ==========================================
 def build_html(team_data, today, tomorrow, next_start):
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
     today_weekday = WEEKDAY_KOR[today.weekday()]
@@ -324,9 +323,6 @@ def build_html(team_data, today, tomorrow, next_start):
     """
     return html
 
-# ==========================================
-# 5. 실행부
-# ==========================================
 if __name__ == "__main__":
     if not JIRA_TOKEN:
         raise ValueError("❌ JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았습니다.")
