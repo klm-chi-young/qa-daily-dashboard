@@ -2,9 +2,8 @@ name: QART Daily Dashboard Auto Update
 
 on:
   schedule:
-    # 매일 월~금 한국 시간 오전 8시 50분 자동 실행 (UTC 기준 23시 50분)
     - cron: '50 23 * * 0-4'
-  workflow_dispatch: # Actions 탭에서 수동 실행 버튼 활성화
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -31,7 +30,10 @@ jobs:
         env:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
         run: |
+          set -e  # 파이썬 실행 중 에러 발생 시 즉시 중단
           python main.py
+          echo "--- 생성된 파일 목록 ---"
+          ls -la  # 현재 폴더에 파일이 제대로 생겼는지 확인
 
       - name: Commit & Push index.html
         env:
