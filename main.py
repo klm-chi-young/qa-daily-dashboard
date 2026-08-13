@@ -1,21 +1,27 @@
 import os
+import sys
 import json
 import urllib.parse
 from datetime import datetime, timedelta
 from jira import JIRA
 
 # ==========================================
-# 1. 설정 정보 (8월 스프린트 번호 적용)
+# 1. 설정 정보
 # ==========================================
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",  # 8월 QART 스프린트 ID
+    "QART_SPRINT": "2942",  # 8월 QART 스프린트 ID
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
-# 📌 깃허브 보안 비밀키(Secrets)에서 지라 토큰을 안전하게 불러옵니다.
+
+# 📌 깃허브 Secrets에서 토큰을 가져오며, 만약 없으면 에러로 알림
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
+
+if not JIRA_TOKEN:
+    print("❌ 오류: JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았거나 불러올 수 없습니다.")
+    sys.exit(1)
 
 # 커스텀 필드 ID 후보군
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
