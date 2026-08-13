@@ -16,12 +16,12 @@ CONFIG = {
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 📌 깃허브 Secrets에서 토큰을 가져오며, 만약 없으면 에러로 알림
+# 📌 깃허브 Secrets에 설정된 JIRA_API_TOKEN 환경변수를 읽어옵니다.
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
 
+# 토큰이 비어있으면 에러를 발생시켜 실행을 멈추게 함
 if not JIRA_TOKEN:
-    print("❌ 오류: JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았거나 불러올 수 없습니다.")
-    sys.exit(1)
+    raise ValueError("❌ JIRA_API_TOKEN 환경변수를 찾을 수 없습니다. GitHub Secrets 설정을 확인하세요.")
 
 # 커스텀 필드 ID 후보군
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
