@@ -354,12 +354,17 @@ def build_html(team_data, today, tomorrow, next_start):
 # 5. 실행부
 # ==========================================
 if __name__ == "__main__":
-    try:
-        data, today, tomorrow, next_start = get_team_dashboard_data()
-        html_out = build_html(data, today, tomorrow, next_start)
-        file_name = "team-daily-dashboard-date-added.html"
-        with open(file_name, "w", encoding="utf-8") as f:
-            f.write(html_out)
-        print(f"\n🎉 성공! '일자 및 요일'이 추가된 대시보드가 생성되었습니다: {os.path.abspath(file_name)}")
-    except Exception as e:
-        print(f"\n❌ 오류 발생: {e}")
+    # 📌 1. 지라 토큰이 제대로 전달되었는지 검증
+    if not JIRA_TOKEN or JIRA_TOKEN == 'YOUR_LOCAL_TOKEN_FOR_TEST':
+        raise ValueError("❌ JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았거나 잘못 전달되었습니다!")
+
+    print("🚀 지라 데이터 추출 및 대시보드 생성 시작...")
+    
+    # 📌 2. try-except 제거하여 에러 발생 시 깃허브 액션이 원인을 명확히 로그에 출력하도록 함
+    data, today, tomorrow, next_start = get_team_dashboard_data()
+    html_out = build_html(data, today, tomorrow, next_start)
+    
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_out)
+        
+    print("🎉 성공! index.html 파일이 정상적으로 생성되었습니다.")
