@@ -2,7 +2,8 @@ name: QART Daily Dashboard Auto Update
 
 on:
   schedule:
-    - cron: '50 23 * * 0-4'
+    # 📌 KST (월~금) 오전 8시 50분 = UTC (일~목) 밤 23시 50분
+    - cron: '50 23 * * SUN-THU'
   workflow_dispatch:
 
 permissions:
