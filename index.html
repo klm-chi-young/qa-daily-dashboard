@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>2026년 08월 13일 목요일 QART 팀원별 데일리 대시보드</title>
+        <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; }
+            body { background-color: #f1f5f9; color: #0f172a; padding: 24px; }
+            .container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
+            
+            .header { grid-column: span 12; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white; padding: 24px 30px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; }
+            .title { font-size: 22px; font-weight: 700; }
+            .sub-info { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+            
+            .summary-bar { grid-column: span 12; display: flex; gap: 15px; background: white; padding: 16px 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
+            .summary-item { flex: 1; text-align: center; border-right: 1px solid #f1f5f9; }
+            .summary-item:last-child { border-right: none; }
+            .summary-label { font-size: 12px; color: #64748b; font-weight: 600; }
+            .summary-val { font-size: 22px; font-weight: 800; color: #dc2626; margin-top: 2px; }
+
+            @media (max-width: 1024px) {
+                .container > div { grid-column: span 12 !important; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <!-- 📌 제목 부분에 일자 및 요일 반영 -->
+            <div class="header">
+                <div>
+                    <div class="title">👥 QART 팀원별 데일리 스크럼 대시보드 (2026년 08월 13일 목요일)</div>
+                    <div class="sub-info">오늘 배포 / 데일리 진행 / 내일 & 차주 일정 관리</div>
+                </div>
+                <div style="text-align:right; font-size:12px; color:#94a3b8;">
+                    업데이트: 2026-08-13 05:50
+                </div>
+            </div>
+
+            <div class="summary-bar">
+                <div class="summary-item">
+                    <div class="summary-label">담당 팀원</div>
+                    <div class="summary-val" style="color:#0f172a;">0명</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">진행 중 티켓</div>
+                    <div class="summary-val">0개</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">인당 평균 진행 티켓</div>
+                    <div class="summary-val" style="color:#2563eb;">0개</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-label">스프린트 전체 티켓</div>
+                    <div class="summary-val" style="color:#64748b;">0개</div>
+                </div>
+            </div>
+
+            
+        </div>
+    </body>
+    </html>
+    
