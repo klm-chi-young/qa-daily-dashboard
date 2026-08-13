@@ -10,28 +10,19 @@ from jira import JIRA
 # ==========================================
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",  # 8월 QART 스프린트 ID
+    "QART_SPRINT": "6643",  # 📌 실제 QART 스프린트 ID 반영
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
-
-# 📌 깃허브 Secrets에 설정된 JIRA_API_TOKEN 환경변수를 읽어옵니다.
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
-
-# 토큰이 비어있으면 에러를 발생시켜 실행을 멈추게 함
-if not JIRA_TOKEN:
-    raise ValueError("❌ JIRA_API_TOKEN 환경변수를 찾을 수 없습니다. GitHub Secrets 설정을 확인하세요.")
 
 # 커스텀 필드 ID 후보군
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
 DEPLOY_DATE_FIELDS = ['customfield_10170', 'customfield_10203', 'customfield_10336']
 
-# 완료 상태 정의
 DONE_STATUSES = ['QA 완료', '배포 완료', 'QA 완료(배포완료)', 'Done', 'Closed', 'Resolved']
-
-# 요일 한글 매핑 딕셔너리
 WEEKDAY_KOR = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
 
 # ==========================================
@@ -56,20 +47,27 @@ def parse_date(date_str):
         return None
 
 # ==========================================
-# 3. Jira 데이터 추출 및 팀원별 분류 로직
+# 3. Jira 데이터 추출 로직
 # ==========================================
 def get_team_dashboard_data():
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
     
+    # 📌 스프린트 ID (6643) 지정 JQL
     jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
-    print(f"🔍 [QART Sprint {CONFIG['QART_SPRINT']}] 데이터 추출 중...")
+    print(f"🔍 실행 JQL: {jql}")
     
     issues = jira.enhanced_search_issues(jql, maxResults=False)
+    print(f"📊 지라에서 조회된 총 이슈 개수: {len(issues)}개")
+
+    # 만약 지정한 스프린트 ID로 조회가 안 될 경우 활성 스프린트 전체 검색 시도 (안전 장치)
+    if len(issues) == 0:
+        jql_fallback = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
+        print(f"⚠️ 스프린트 {CONFIG['QART_SPRINT']} 조회 결과 0건. openSprints JQL 재시도: {jql_fallback}")
+        issues = jira.enhanced_search_issues(jql_fallback, maxResults=False)
+        print(f"📊 openSprints로 조회된 이슈 개수: {len(issues)}개")
     
-    # 기준 날짜 계산
     today = datetime.now().date()
     tomorrow = today + timedelta(days=1)
-    
     this_week_end = today + timedelta(days=(6 - today.weekday()))
     next_week_start = this_week_end + timedelta(days=1)
 
@@ -86,18 +84,14 @@ def get_team_dashboard_data():
         start_date = parse_date(start_date_str)
         due_date = parse_date(due_date_str)
         deploy_date = parse_date(deploy_date_str)
-        
-        # 7월 이전 과거 종료건 필터링
-        if due_date and due_date < parse_date("2026-08-01"):
-            continue
 
         if assignee not in team_data:
             team_data[assignee] = {
-                'today_deploy': [],    # 1. 🚀 오늘 배포 예정
-                'today_progress': [],  # 2. 🔴 오늘 진행 중
-                'tomorrow_plan': [],   # 3. 🟠 내일 진행 예정
-                'next_week': [],       # 4. 🟡 다음 주 예정 업무
-                'no_date': [],         # 5. ⚪ 날짜 미정 업무
+                'today_deploy': [],
+                'today_progress': [],
+                'tomorrow_plan': [],
+                'next_week': [],
+                'no_date': [],
                 'total_count': 0
             }
             
@@ -111,18 +105,15 @@ def get_team_dashboard_data():
             'link': f"{JIRA_SERVER}/browse/{i.key}"
         }
         
-        # 📌 [분류 로직]
-        
-        # 1. 오늘 배포 예정 (배포일이 오늘인 경우)
+        # 1. 오늘 배포 예정 (배포일 기준)
         if deploy_date and deploy_date == today:
             team_data[assignee]['today_deploy'].append(issue_info)
 
-        # 이미 완료(QA 완료 등)된 티켓인지 확인
         is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
 
-        # 완료된 이슈는 배포 예정 이외의 섹션에는 노출하지 않음
+        # 완료된 이슈는 배포 예정 이외의 섹션에서는 차단
         if not is_done:
-            # 2. 오늘 진행 중 (시작일 ~ 기한 범위 내 오늘이 속한 경우)
+            # 2. 오늘 진행 중
             is_today_progress = False
             if start_date and due_date and (start_date <= today <= due_date):
                 is_today_progress = True
@@ -158,7 +149,6 @@ def get_team_dashboard_data():
 
         team_data[assignee]['total_count'] += 1
 
-    print(f"✅ 총 {len(team_data)}개 담당 그룹 데이터 분류 완료!")
     return team_data, today, tomorrow, next_week_start
 
 # ==========================================
@@ -166,31 +156,22 @@ def get_team_dashboard_data():
 # ==========================================
 def build_html(team_data, today, tomorrow, next_start):
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
-    
-    # 📌 [오늘의 일자 및 요일 생성] 예: 2026년 08월 13일 목요일
     today_weekday = WEEKDAY_KOR[today.weekday()]
     full_title_date = f"{today.strftime('%Y년 %m월 %d일')} {today_weekday}"
     
-    # 중복 제거된 오늘 진행 중/배포 티켓 수
     today_active_keys = set()
     for data in team_data.values():
-        for item in data['today_deploy']:
-            today_active_keys.add(item['key'])
-        for item in data['today_progress']:
-            today_active_keys.add(item['key'])
+        for item in data['today_deploy']: today_active_keys.add(item['key'])
+        for item in data['today_progress']: today_active_keys.add(item['key'])
             
     active_in_progress_count = len(today_active_keys)
     total_assigned_issues = sum(data['total_count'] for data in team_data.values())
 
-    sorted_members = sorted(
-        team_data.keys(),
-        key=lambda x: (x == "미지정", x)
-    )
+    sorted_members = sorted(team_data.keys(), key=lambda x: (x == "미지정", x))
 
     member_cards_html = ""
     for member in sorted_members:
         data = team_data[member]
-        
         card_border_style = "border:1px dashed #cbd5e1; background:#f8fafc;" if member == "미지정" else "border:1px solid #e2e8f0; background:white;"
         avatar_bg = "#94a3b8" if member == "미지정" else "#2563eb"
 
@@ -224,7 +205,6 @@ def build_html(team_data, today, tomorrow, next_start):
 
         member_cards_html += f"""
         <div style="border-radius:14px; {card_border_style} padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05); grid-column: span 6;">
-            <!-- 팀원 헤더 -->
             <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:2px solid #f1f5f9; margin-bottom:16px;">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <div style="width:36px; height:36px; background:{avatar_bg}; color:white; font-weight:700; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px;">
@@ -240,7 +220,6 @@ def build_html(team_data, today, tomorrow, next_start):
                 </div>
             </div>
 
-            <!-- 1. 오늘 배포 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#059669; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🚀 오늘 배포 예정 (배포일: {today.strftime('%m/%d')} : {len(data['today_deploy'])})
@@ -248,7 +227,6 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_deploy'], "#059669")}
             </div>
 
-            <!-- 2. 오늘 진행 중 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#dc2626; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🔴 오늘 진행 중 ({today.strftime('%m/%d')} : {len(data['today_progress'])})
@@ -256,7 +234,6 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_progress'], "#dc2626")}
             </div>
 
-            <!-- 3. 내일 진행 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#d97706; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟠 내일 진행 예정 ({tomorrow.strftime('%m/%d')} : {len(data['tomorrow_plan'])})
@@ -264,7 +241,6 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['tomorrow_plan'], "#d97706")}
             </div>
 
-            <!-- 4. 다음 주 예정 업무 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#2563eb; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟡 다음 주 예정 업무 ({next_start.strftime('%m/%d')} ~ : {len(data['next_week'])})
@@ -272,7 +248,6 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['next_week'], "#2563eb")}
             </div>
 
-            <!-- 5. 시작일/기한 미정 업무 -->
             <div>
                 <div style="font-size:13px; font-weight:700; color:#64748b; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     ⚪ 시작일/기한 미정 업무 ({len(data['no_date'])})
@@ -313,7 +288,6 @@ def build_html(team_data, today, tomorrow, next_start):
     </head>
     <body>
         <div class="container">
-            <!-- 📌 제목 부분에 일자 및 요일 반영 -->
             <div class="header">
                 <div>
                     <div class="title">👥 QART 팀원별 데일리 스크럼 대시보드 ({full_title_date})</div>
@@ -354,17 +328,14 @@ def build_html(team_data, today, tomorrow, next_start):
 # 5. 실행부
 # ==========================================
 if __name__ == "__main__":
-    # 📌 1. 지라 토큰이 제대로 전달되었는지 검증
-    if not JIRA_TOKEN or JIRA_TOKEN == 'YOUR_LOCAL_TOKEN_FOR_TEST':
-        raise ValueError("❌ JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았거나 잘못 전달되었습니다!")
+    if not JIRA_TOKEN:
+        raise ValueError("❌ JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았습니다.")
 
     print("🚀 지라 데이터 추출 및 대시보드 생성 시작...")
-    
-    # 📌 2. try-except 제거하여 에러 발생 시 깃허브 액션이 원인을 명확히 로그에 출력하도록 함
     data, today, tomorrow, next_start = get_team_dashboard_data()
     html_out = build_html(data, today, tomorrow, next_start)
     
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_out)
         
-    print("🎉 성공! index.html 파일이 정상적으로 생성되었습니다.")
+    print("🎉 성공! index.html 생성 완료!")
