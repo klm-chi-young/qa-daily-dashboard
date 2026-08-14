@@ -2,7 +2,7 @@ name: QART Daily Dashboard Auto Update
 
 on:
   schedule:
-    # 📌 KST (월~금) 오전 8시 50분 = UTC (일~목) 밤 23시 50분
+    # 📌 한국시간(KST) 월~금 오전 8시 50분 = UTC 일~목 밤 23시 50분
     - cron: '50 23 * * SUN-THU'
   workflow_dispatch:
 
@@ -10,38 +10,30 @@ permissions:
   contents: write
 
 jobs:
-  build-and-deploy:
+  update-dashboard:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+      - uses: actions/checkout@v3
+      
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
+          
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-
-      - name: Run Generator Script
+          python -m pip install --upgrade pip
+          pip install jira
+          
+      - name: Run Daily Script
         env:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: python daily.py
+        
+      - name: Commit and Push changes
         run: |
-          set -e  # 파이썬 실행 중 에러 발생 시 즉시 중단
-          python main.py
-          echo "--- 생성된 파일 목록 ---"
-          ls -la  # 현재 폴더에 파일이 제대로 생겼는지 확인
-
-      - name: Commit & Push index.html
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git add index.html
-          git commit -m "Auto update dashboard: $(date +'%Y-%m-%d %H:%M')" || echo "No changes to commit"
-          git push origin HEAD:${{ github.ref_name }}
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff-index --quiet HEAD || git commit -m "Auto update daily dashboard"
+          git push
