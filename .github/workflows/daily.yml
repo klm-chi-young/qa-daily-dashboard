@@ -28,7 +28,8 @@ jobs:
       - name: Run Daily Script
         env:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-        run: python daily.py
+        # 📌 파일명을 main.py로 수정 완료!
+        run: python main.py
         
       - name: Commit and Push changes
         run: |
