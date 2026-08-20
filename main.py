@@ -9,16 +9,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# 📌 8월 스프린트 설정
-CONFIG = {
-    "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",
-}
-
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 읽어옵니다.
+# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 불러옵니다.
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
 
 TEAM_CALENDAR_EMAILS = {
@@ -40,8 +34,6 @@ SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 
 def get_calendar_service():
     creds = None
-    
-    # 📌 GitHub Secrets에 등록된 GOOGLE_TOKEN_JSON 값 사용
     token_json_env = os.environ.get('GOOGLE_TOKEN_JSON')
     if token_json_env:
         with open('token.json', 'w', encoding='utf-8') as f:
@@ -117,14 +109,23 @@ def parse_date(date_str):
 def get_team_dashboard_data():
     if not JIRA_TOKEN:
         raise ValueError("JIRA_API_TOKEN 환경 변수가 설정되지 않았습니다. GitHub Secrets를 확인해 주세요.")
-        
+
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
     cal_service = get_calendar_service()
     
-    jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
-    print(f"🔍 [QART Sprint {CONFIG['QART_SPRINT']}] 데이터 추출 중...")
+    # 📌 현재 활성화된(openSprints) 스프린트 자동 탐색 조건
+    jql = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
+    print(f"🔍 [QART 진행 중인 스프린트] 데이터 추출 중...")
     
     issues = jira.enhanced_search_issues(jql, maxResults=False)
+    
+    # 활성 스프린트 검색 결과가 없을 경우 최신 QART 이슈 50개 파싱
+    if not issues:
+        print("⚠️ 진행 중인 스프린트 조건 결과가 없어 최근 생성된 QART 이슈를 파싱합니다.")
+        jql = 'project = "QART" ORDER BY created DESC'
+        issues = jira.enhanced_search_issues(jql, maxResults=50)
+
+    print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
     
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
@@ -145,14 +146,10 @@ def get_team_dashboard_data():
         start_date = parse_date(start_date_str)
         due_date = parse_date(due_date_str)
         deploy_date = parse_date(deploy_date_str)
-        
-        if due_date and due_date < parse_date("2026-08-01"):
-            continue
 
         if assignee not in team_data:
             cal_email = TEAM_CALENDAR_EMAILS.get(assignee, None)
             
-            # 본인 계정인 경우 무조건 내 기본 캘린더('primary')를 읽도록 처리
             if "리암" in assignee or cal_email == "cy.kim2@pet-friends.co.kr":
                 cal_email = 'primary'
 
@@ -387,7 +384,7 @@ def build_html(team_data, today, tomorrow, next_start):
             <div class="header">
                 <div>
                     <div class="title">👥 QART 팀원별 데일리 스크럼 대시보드 ({full_title_date})</div>
-                    <div class="sub-info">오늘 회의 / 오늘 배포 / 데일리 진행 / 차주 일정 관리</div>
+                    <div class="sub-info">오늘 회의 / 오늘 배포 / 데일리 진행 관리</div>
                 </div>
                 <div style="text-align:right; font-size:12px; color:#94a3b8;">
                     업데이트: {now} (KST)
