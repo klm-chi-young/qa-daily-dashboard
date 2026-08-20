@@ -9,10 +9,16 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+# 📌 스프린트 설정
+CONFIG = {
+    "REPORT_MONTH": "2026년 8월",
+    "QART_SPRINT": "6643",
+}
+
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 읽어옵니다.
+# 🔒 보안 처리: GitHub Secrets의 JIRA_API_TOKEN 사용
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
 
 TEAM_CALENDAR_EMAILS = {
@@ -114,7 +120,7 @@ def get_team_dashboard_data():
 
     cal_service = get_calendar_service()
 
-    # 📌 1. 팀원 기본 골격 데이터 먼저 생성 (이슈가 없어도 카드와 회의는 무조건 표시)
+    # 1. 팀원 기본 데이터 구조 생성 (이슈 여부와 무관하게 카드/회의 고정 표시)
     team_data = {}
     for member_name, cal_email in TEAM_CALENDAR_EMAILS.items():
         read_email = 'primary' if "리암" in member_name or cal_email == JIRA_USER else cal_email
@@ -130,14 +136,14 @@ def get_team_dashboard_data():
             'total_count': 0
         }
 
-    # 📌 2. Jira 이슈 파싱
+    # 2. Jira 이슈 파싱 (지정한 스프린트 사용)
     issues = []
     if JIRA_TOKEN:
         try:
             jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
-            # 모든 미완료 QART 이슈 및 최근 100개 파싱
-            jql = 'project = "QART" ORDER BY created DESC'
-            issues = jira.enhanced_search_issues(jql, maxResults=100)
+            jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
+            print(f"🔍 [QART Sprint {CONFIG['QART_SPRINT']}] 데이터 추출 중...")
+            issues = jira.enhanced_search_issues(jql, maxResults=False)
             print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
         except Exception as e:
             print(f"❌ Jira 연결 에러: {e}")
