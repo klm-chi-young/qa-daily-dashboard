@@ -9,7 +9,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# 📌 스프린트 및 지라 기본 설정
+# 📌 8월 스프린트 설정
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
     "QART_SPRINT": "6643",
@@ -18,9 +18,8 @@ CONFIG = {
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 🔒 GitHub Secrets 환경변수가 있으면 우선 사용하고, 없으면 로컬 토큰 사용
-DEFAULT_JIRA_TOKEN = 'ATATT3xFfGF0mHwbiV8459jCQVYaiNeCU7OxD2W3jGAtkauFyC1XcGaTcAquyxcZAqOEpEsmo5WwOWsWKC_Y1nn3GDv47Uy8GqF3WpJ_d-lZUrt941RWDnPPaRj6r2MKmrp8B8SMPaO2WwJaXXcCErC-t-Zwt9tPTDVRAlFrCTSI139OVBJvqmw=B24E9189'
-JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', DEFAULT_JIRA_TOKEN)
+# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 읽어옵니다.
+JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
 
 TEAM_CALENDAR_EMAILS = {
     "리암(Liam/김치영)": "cy.kim2@pet-friends.co.kr",
@@ -28,10 +27,6 @@ TEAM_CALENDAR_EMAILS = {
     "솔릭(Solric/구건모)": "gm.koo@pet-friends.co.kr",
     "하퍼(Harper/이하경)": "hk.lee@pet-friends.co.kr",
 }
-
-# 📌 재택근무 및 연차 전용 공유 캘린더 ID
-WFH_CALENDAR_ID = "c_12c729cfdae7788552389056fdcb88b0e467397389f8b8341e603cc39134c8ce@group.calendar.google.com"
-LEAVE_CALENDAR_ID = "c_99td6sl4k8em7srgnd83j4p2d4@group.calendar.google.com"
 
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
@@ -45,6 +40,8 @@ SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 
 def get_calendar_service():
     creds = None
+    
+    # 📌 GitHub Secrets에 등록된 GOOGLE_TOKEN_JSON 값 사용
     token_json_env = os.environ.get('GOOGLE_TOKEN_JSON')
     if token_json_env:
         with open('token.json', 'w', encoding='utf-8') as f:
@@ -99,30 +96,6 @@ def fetch_today_meetings(service, calendar_email, today_date):
         print(f"❌ [{calendar_email}] 캘린더 읽기 에러: {e}")
         return []
 
-def check_shared_calendar_for_user(service, calendar_id, assignee_name, today_date):
-    if not service or not calendar_id:
-        return False
-    start_dt = datetime(today_date.year, today_date.month, today_date.day, 0, 0, 0, tzinfo=KST).isoformat()
-    end_dt = datetime(today_date.year, today_date.month, today_date.day, 23, 59, 59, tzinfo=KST).isoformat()
-    try:
-        events_result = service.events().list(
-            calendarId=calendar_id,
-            timeMin=start_dt,
-            timeMax=end_dt,
-            singleEvents=True
-        ).execute()
-        items = events_result.get('items', [])
-        
-        # 이름 키워드 분해 (예: "리암(Liam/김치영)" -> "리암", "김치영" 등)
-        tokens = assignee_name.replace('(', ' ').replace('/', ' ').replace(')', ' ').split()
-        for item in items:
-            summary = item.get('summary', '')
-            if any(token in summary for token in tokens):
-                return True
-    except Exception as e:
-        print(f"❌ 공유 캘린더 조회 에러: {e}")
-    return False
-
 def get_field_value(issue_fields, field_id_list):
     for fid in field_id_list:
         val = getattr(issue_fields, fid, None)
@@ -142,6 +115,9 @@ def parse_date(date_str):
         return None
 
 def get_team_dashboard_data():
+    if not JIRA_TOKEN:
+        raise ValueError("JIRA_API_TOKEN 환경 변수가 설정되지 않았습니다. GitHub Secrets를 확인해 주세요.")
+        
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
     cal_service = get_calendar_service()
     
@@ -175,24 +151,15 @@ def get_team_dashboard_data():
 
         if assignee not in team_data:
             cal_email = TEAM_CALENDAR_EMAILS.get(assignee, None)
+            
+            # 본인 계정인 경우 무조건 내 기본 캘린더('primary')를 읽도록 처리
             if "리암" in assignee or cal_email == "cy.kim2@pet-friends.co.kr":
                 cal_email = 'primary'
 
             today_meetings = fetch_today_meetings(cal_service, cal_email, today)
-            
-            # 📌 재택 / 연차 전용 캘린더에서 오늘 상태 확인
-            work_status = []
-            is_wfh = check_shared_calendar_for_user(cal_service, WFH_CALENDAR_ID, assignee, today)
-            is_leave = check_shared_calendar_for_user(cal_service, LEAVE_CALENDAR_ID, assignee, today)
-            
-            if is_wfh:
-                work_status.append({'icon': '🏠', 'time': '종일', 'summary': '재택근무'})
-            if is_leave:
-                work_status.append({'icon': '🌴', 'time': '종일', 'summary': '연차 휴가 (입사일 기준 1년 이상인 자)'})
 
             team_data[assignee] = {
                 'today_meetings': today_meetings,
-                'work_status': work_status,
                 'today_deploy': [],
                 'today_progress': [],
                 'tomorrow_plan': [],
@@ -277,25 +244,6 @@ def build_html(team_data, today, tomorrow, next_start):
         card_border_style = "border:1px dashed #cbd5e1; background:#f8fafc;" if member == "미지정" else "border:1px solid #e2e8f0; background:white;"
         avatar_bg = "#94a3b8" if member == "미지정" else "#2563eb"
 
-        def render_work_status_list(status_list):
-            if not status_list:
-                return ""
-            html = "<div style='display:flex; flex-direction:column; gap:6px; margin-bottom:12px;'>"
-            for s in status_list:
-                bg_color = "#eff6ff" if s['icon'] == "🏠" else "#fff7ed"
-                border_color = "#3b82f6" if s['icon'] == "🏠" else "#f97316"
-                text_color = "#1d4ed8" if s['icon'] == "🏠" else "#c2410c"
-                
-                html += f"""
-                <div style="background:{bg_color}; border-left:3px solid {border_color}; padding:6px 10px; border-radius:4px; font-size:12px; display:flex; align-items:center; gap:6px;">
-                    <span style="font-size:14px;">{s['icon']}</span>
-                    <span style="font-weight:700; color:{text_color};">[{s['time']}]</span>
-                    <span style="font-weight:600; color:#1e293b;">{s['summary']}</span>
-                </div>
-                """
-            html += "</div>"
-            return html
-
         def render_meeting_list(meeting_list):
             if not meeting_list:
                 return "<div style='color:#94a3b8; font-size:12px; padding:4px 0;'>오늘 예정된 회의 없음</div>"
@@ -355,10 +303,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 </div>
             </div>
 
-            <!-- 0. 🏠 근무 상태 / 🌴 연차 배지 영역 -->
-            {render_work_status_list(data['work_status'])}
-
-            <!-- 1. 📅 오늘 예정된 회의 -->
+            <!-- 0. 📅 오늘 예정된 회의 -->
             <div style="margin-bottom:16px; background:#f8fafc; padding:10px 12px; border-radius:8px; border:1px solid #e2e8f0;">
                 <div style="font-size:13px; font-weight:700; color:#7c3aed; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     📅 오늘 예정된 회의 ({len(data['today_meetings'])})
@@ -366,7 +311,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_meeting_list(data['today_meetings'])}
             </div>
 
-            <!-- 2. 오늘 배포 예정 -->
+            <!-- 1. 오늘 배포 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#059669; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🚀 오늘 배포 예정 (배포일: {today.strftime('%m/%d')} : {len(data['today_deploy'])})
@@ -374,7 +319,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_deploy'], "#059669")}
             </div>
 
-            <!-- 3. 오늘 진행 중 -->
+            <!-- 2. 오늘 진행 중 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#dc2626; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🔴 오늘 진행 중 ({today.strftime('%m/%d')} : {len(data['today_progress'])})
@@ -382,7 +327,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_progress'], "#dc2626")}
             </div>
 
-            <!-- 4. 내일 진행 예정 -->
+            <!-- 3. 내일 진행 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#d97706; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟠 내일 진행 예정 ({tomorrow.strftime('%m/%d')} : {len(data['tomorrow_plan'])})
@@ -390,7 +335,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['tomorrow_plan'], "#d97706")}
             </div>
 
-            <!-- 5. 다음 주 예정 업무 -->
+            <!-- 4. 다음 주 예정 업무 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#2563eb; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟡 다음 주 예정 업무 ({next_start.strftime('%m/%d')} ~ : {len(data['next_week'])})
@@ -398,7 +343,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['next_week'], "#2563eb")}
             </div>
 
-            <!-- 6. 시작일/기한 미정 업무 -->
+            <!-- 5. 시작일/기한 미정 업무 -->
             <div>
                 <div style="font-size:13px; font-weight:700; color:#64748b; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     ⚪ 시작일/기한 미정 업무 ({len(data['no_date'])})
@@ -442,7 +387,7 @@ def build_html(team_data, today, tomorrow, next_start):
             <div class="header">
                 <div>
                     <div class="title">👥 QART 팀원별 데일리 스크럼 대시보드 ({full_title_date})</div>
-                    <div class="sub-info">오늘 근무·연차 / 오늘 회의 / 오늘 배포 / 데일리 진행 관리</div>
+                    <div class="sub-info">오늘 회의 / 오늘 배포 / 데일리 진행 / 차주 일정 관리</div>
                 </div>
                 <div style="text-align:right; font-size:12px; color:#94a3b8;">
                     업데이트: {now} (KST)
