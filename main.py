@@ -1,13 +1,15 @@
 import os
-import sys
 import json
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jira import JIRA
 
-# ==========================================
-# 1. 설정 정보
-# ==========================================
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+
+# 📌 8월 스프린트 설정
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
     "QART_SPRINT": "6643",
@@ -15,7 +17,16 @@ CONFIG = {
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
-JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN', '')
+
+# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 읽어옵니다.
+JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
+
+TEAM_CALENDAR_EMAILS = {
+    "리암(Liam/김치영)": "cy.kim2@pet-friends.co.kr",
+    "베리(Berry/강샛별)": "sb.kang@pet-friends.co.kr",
+    "솔릭(Solric/구건모)": "gm.koo@pet-friends.co.kr",
+    "하퍼(Harper/이하경)": "hk.lee@pet-friends.co.kr",
+}
 
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
@@ -23,6 +34,67 @@ DEPLOY_DATE_FIELDS = ['customfield_10170', 'customfield_10203', 'customfield_103
 
 DONE_STATUSES = ['QA 완료', '배포 완료', 'QA 완료(배포완료)', 'Done', 'Closed', 'Resolved']
 WEEKDAY_KOR = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
+
+KST = timezone(timedelta(hours=9))
+SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+
+def get_calendar_service():
+    creds = None
+    
+    # 📌 GitHub Secrets에 등록된 GOOGLE_TOKEN_JSON 값 사용
+    token_json_env = os.environ.get('GOOGLE_TOKEN_JSON')
+    if token_json_env:
+        with open('token.json', 'w', encoding='utf-8') as f:
+            f.write(token_json_env)
+
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists('credentials.json'):
+                print("⚠️ credentials.json 키 파일이 없습니다.")
+                return None
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+            
+        with open('token.json', 'w', encoding='utf-8') as token:
+            token.write(creds.to_json())
+            
+    return build('calendar', 'v3', credentials=creds)
+
+def fetch_today_meetings(service, calendar_email, today_date):
+    if not service or not calendar_email:
+        return []
+    start_dt = datetime(today_date.year, today_date.month, today_date.day, 0, 0, 0, tzinfo=KST).isoformat()
+    end_dt = datetime(today_date.year, today_date.month, today_date.day, 23, 59, 59, tzinfo=KST).isoformat()
+    try:
+        events_result = service.events().list(
+            calendarId=calendar_email,
+            timeMin=start_dt,
+            timeMax=end_dt,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        items = events_result.get('items', [])
+        meetings = []
+        for item in items:
+            summary = item.get('summary', '(제목 없음)')
+            start = item['start'].get('dateTime', item['start'].get('date'))
+            end = item['end'].get('dateTime', item['end'].get('date'))
+            if 'T' in start:
+                start_time = start.split('T')[1][:5]
+                end_time = end.split('T')[1][:5] if 'T' in end else ''
+                time_str = f"{start_time} ~ {end_time}"
+            else:
+                time_str = "종일 일정"
+            meetings.append({'summary': summary, 'time': time_str})
+        return meetings
+    except Exception as e:
+        print(f"❌ [{calendar_email}] 캘린더 읽기 에러: {e}")
+        return []
 
 def get_field_value(issue_fields, field_id_list):
     for fid in field_id_list:
@@ -43,39 +115,20 @@ def parse_date(date_str):
         return None
 
 def get_team_dashboard_data():
+    if not JIRA_TOKEN:
+        raise ValueError("JIRA_API_TOKEN 환경 변수가 설정되지 않았습니다. GitHub Secrets를 확인해 주세요.")
+        
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
+    cal_service = get_calendar_service()
     
-    # 📌 진단 1: QART 프로젝트 전체 이슈 조회 테스트
-    jql_test1 = 'project = "QART" ORDER BY created DESC'
-    print(f"🔍 [진단 1] JQL: {jql_test1}")
-    issues_test1 = jira.enhanced_search_issues(jql_test1, maxResults=50)
-    print(f"📊 QART 프로젝트 전체 검색 결과: {len(issues_test1)}개")
-
-    # 📌 진단 2: 스프린트 ID 단독 조회 테스트
-    jql_test2 = f'sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
-    print(f"🔍 [진단 2] JQL: {jql_test2}")
-    issues_test2 = jira.enhanced_search_issues(jql_test2, maxResults=False)
-    print(f"📊 Sprint {CONFIG['QART_SPRINT']} 단독 검색 결과: {len(issues_test2)}개")
-
-    # 📌 진단 3: openSprints 조회 테스트
-    jql_test3 = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
-    print(f"🔍 [진단 3] JQL: {jql_test3}")
-    issues_test3 = jira.enhanced_search_issues(jql_test3, maxResults=False)
-    print(f"📊 openSprints() 검색 결과: {len(issues_test3)}개")
-
-    # 최종 채택할 이슈 목록 (스프린트 6643 우선, 없으면 openSprints, 없으면 QART 전체)
-    if len(issues_test2) > 0:
-        issues = issues_test2
-        print(f"✅ [선택] Sprint {CONFIG['QART_SPRINT']} 데이터 {len(issues)}건으로 생성 진행")
-    elif len(issues_test3) > 0:
-        issues = issues_test3
-        print(f"✅ [선택] openSprints() 데이터 {len(issues)}건으로 생성 진행")
-    else:
-        issues = issues_test1
-        print(f"⚠️ [대체] QART 최근 데이터 {len(issues)}건으로 생성 진행")
-
-    today = datetime.now().date()
+    jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
+    print(f"🔍 [QART Sprint {CONFIG['QART_SPRINT']}] 데이터 추출 중...")
+    
+    issues = jira.enhanced_search_issues(jql, maxResults=False)
+    
+    today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
+    
     this_week_end = today + timedelta(days=(6 - today.weekday()))
     next_week_start = this_week_end + timedelta(days=1)
 
@@ -92,9 +145,21 @@ def get_team_dashboard_data():
         start_date = parse_date(start_date_str)
         due_date = parse_date(due_date_str)
         deploy_date = parse_date(deploy_date_str)
+        
+        if due_date and due_date < parse_date("2026-08-01"):
+            continue
 
         if assignee not in team_data:
+            cal_email = TEAM_CALENDAR_EMAILS.get(assignee, None)
+            
+            # 본인 계정인 경우 무조건 내 기본 캘린더('primary')를 읽도록 처리
+            if "리암" in assignee or cal_email == "cy.kim2@pet-friends.co.kr":
+                cal_email = 'primary'
+
+            today_meetings = fetch_today_meetings(cal_service, cal_email, today)
+
             team_data[assignee] = {
+                'today_meetings': today_meetings,
                 'today_deploy': [],
                 'today_progress': [],
                 'tomorrow_plan': [],
@@ -151,17 +216,21 @@ def get_team_dashboard_data():
 
         team_data[assignee]['total_count'] += 1
 
+    print(f"✅ 총 {len(team_data)}개 담당 그룹 데이터 분류 완료!")
     return team_data, today, tomorrow, next_week_start
 
 def build_html(team_data, today, tomorrow, next_start):
-    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now = datetime.now(KST).strftime('%Y-%m-%d %H:%M')
+    
     today_weekday = WEEKDAY_KOR[today.weekday()]
     full_title_date = f"{today.strftime('%Y년 %m월 %d일')} {today_weekday}"
     
     today_active_keys = set()
     for data in team_data.values():
-        for item in data['today_deploy']: today_active_keys.add(item['key'])
-        for item in data['today_progress']: today_active_keys.add(item['key'])
+        for item in data['today_deploy']:
+            today_active_keys.add(item['key'])
+        for item in data['today_progress']:
+            today_active_keys.add(item['key'])
             
     active_in_progress_count = len(today_active_keys)
     total_assigned_issues = sum(data['total_count'] for data in team_data.values())
@@ -171,8 +240,23 @@ def build_html(team_data, today, tomorrow, next_start):
     member_cards_html = ""
     for member in sorted_members:
         data = team_data[member]
+        
         card_border_style = "border:1px dashed #cbd5e1; background:#f8fafc;" if member == "미지정" else "border:1px solid #e2e8f0; background:white;"
         avatar_bg = "#94a3b8" if member == "미지정" else "#2563eb"
+
+        def render_meeting_list(meeting_list):
+            if not meeting_list:
+                return "<div style='color:#94a3b8; font-size:12px; padding:4px 0;'>오늘 예정된 회의 없음</div>"
+            html = "<div style='display:flex; flex-direction:column; gap:6px;'>"
+            for m in meeting_list:
+                html += f"""
+                <div style="background:#f1f5f9; border-left:3px solid #8b5cf6; padding:6px 10px; border-radius:4px; font-size:12px;">
+                    <span style="font-weight:700; color:#6d28d9;">[{m['time']}]</span>
+                    <span style="font-weight:600; color:#1e293b; margin-left:6px;">{m['summary']}</span>
+                </div>
+                """
+            html += "</div>"
+            return html
 
         def render_issue_list(issue_list, badge_color="#2563eb"):
             if not issue_list:
@@ -219,6 +303,15 @@ def build_html(team_data, today, tomorrow, next_start):
                 </div>
             </div>
 
+            <!-- 0. 📅 오늘 예정된 회의 -->
+            <div style="margin-bottom:16px; background:#f8fafc; padding:10px 12px; border-radius:8px; border:1px solid #e2e8f0;">
+                <div style="font-size:13px; font-weight:700; color:#7c3aed; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                    📅 오늘 예정된 회의 ({len(data['today_meetings'])})
+                </div>
+                {render_meeting_list(data['today_meetings'])}
+            </div>
+
+            <!-- 1. 오늘 배포 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#059669; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🚀 오늘 배포 예정 (배포일: {today.strftime('%m/%d')} : {len(data['today_deploy'])})
@@ -226,6 +319,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_deploy'], "#059669")}
             </div>
 
+            <!-- 2. 오늘 진행 중 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#dc2626; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🔴 오늘 진행 중 ({today.strftime('%m/%d')} : {len(data['today_progress'])})
@@ -233,6 +327,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['today_progress'], "#dc2626")}
             </div>
 
+            <!-- 3. 내일 진행 예정 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#d97706; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟠 내일 진행 예정 ({tomorrow.strftime('%m/%d')} : {len(data['tomorrow_plan'])})
@@ -240,6 +335,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['tomorrow_plan'], "#d97706")}
             </div>
 
+            <!-- 4. 다음 주 예정 업무 -->
             <div style="margin-bottom:16px;">
                 <div style="font-size:13px; font-weight:700; color:#2563eb; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     🟡 다음 주 예정 업무 ({next_start.strftime('%m/%d')} ~ : {len(data['next_week'])})
@@ -247,6 +343,7 @@ def build_html(team_data, today, tomorrow, next_start):
                 {render_issue_list(data['next_week'], "#2563eb")}
             </div>
 
+            <!-- 5. 시작일/기한 미정 업무 -->
             <div>
                 <div style="font-size:13px; font-weight:700; color:#64748b; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
                     ⚪ 시작일/기한 미정 업무 ({len(data['no_date'])})
@@ -290,10 +387,10 @@ def build_html(team_data, today, tomorrow, next_start):
             <div class="header">
                 <div>
                     <div class="title">👥 QART 팀원별 데일리 스크럼 대시보드 ({full_title_date})</div>
-                    <div class="sub-info">오늘 배포 / 데일리 진행 / 내일 & 차주 일정 관리</div>
+                    <div class="sub-info">오늘 회의 / 오늘 배포 / 데일리 진행 / 차주 일정 관리</div>
                 </div>
                 <div style="text-align:right; font-size:12px; color:#94a3b8;">
-                    업데이트: {now}
+                    업데이트: {now} (KST)
                 </div>
             </div>
 
@@ -324,14 +421,12 @@ def build_html(team_data, today, tomorrow, next_start):
     return html
 
 if __name__ == "__main__":
-    if not JIRA_TOKEN:
-        raise ValueError("❌ JIRA_API_TOKEN 이 깃허브 Secrets에 설정되지 않았습니다.")
-
-    print("🚀 지라 데이터 추출 및 대시보드 생성 시작...")
-    data, today, tomorrow, next_start = get_team_dashboard_data()
-    html_out = build_html(data, today, tomorrow, next_start)
-    
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_out)
-        
-    print("🎉 성공! index.html 생성 완료!")
+    try:
+        data, today, tomorrow, next_start = get_team_dashboard_data()
+        html_out = build_html(data, today, tomorrow, next_start)
+        file_name = "index.html"
+        with open(file_name, "w", encoding="utf-8") as f:
+            f.write(html_out)
+        print(f"\n🎉 성공! 데일리 현황판이 생성되었습니다: {os.path.abspath(file_name)}")
+    except Exception as e:
+        print(f"\n❌ 오류 발생: {e}")
