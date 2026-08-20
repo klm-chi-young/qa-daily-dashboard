@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 불러옵니다.
+# 🔒 보안 처리: API 토큰을 소스코드에 남기지 않고 GitHub Secrets / 환경변수에서만 읽어옵니다.
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
 
 TEAM_CALENDAR_EMAILS = {
@@ -107,38 +107,67 @@ def parse_date(date_str):
         return None
 
 def get_team_dashboard_data():
-    if not JIRA_TOKEN:
-        raise ValueError("JIRA_API_TOKEN 환경 변수가 설정되지 않았습니다. GitHub Secrets를 확인해 주세요.")
-
-    jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
-    cal_service = get_calendar_service()
-    
-    # 📌 현재 활성화된(openSprints) 스프린트 자동 탐색 조건
-    jql = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
-    print(f"🔍 [QART 진행 중인 스프린트] 데이터 추출 중...")
-    
-    issues = jira.enhanced_search_issues(jql, maxResults=False)
-    
-    # 활성 스프린트 검색 결과가 없을 경우 최신 QART 이슈 50개 파싱
-    if not issues:
-        print("⚠️ 진행 중인 스프린트 조건 결과가 없어 최근 생성된 QART 이슈를 파싱합니다.")
-        jql = 'project = "QART" ORDER BY created DESC'
-        issues = jira.enhanced_search_issues(jql, maxResults=50)
-
-    print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
-    
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
-    
     this_week_end = today + timedelta(days=(6 - today.weekday()))
     next_week_start = this_week_end + timedelta(days=1)
 
+    cal_service = get_calendar_service()
+
+    # 📌 1. 팀원 기본 골격 데이터 먼저 생성 (이슈가 없어도 카드와 회의는 무조건 표시)
     team_data = {}
-    
+    for member_name, cal_email in TEAM_CALENDAR_EMAILS.items():
+        read_email = 'primary' if "리암" in member_name or cal_email == JIRA_USER else cal_email
+        today_meetings = fetch_today_meetings(cal_service, read_email, today)
+        
+        team_data[member_name] = {
+            'today_meetings': today_meetings,
+            'today_deploy': [],
+            'today_progress': [],
+            'tomorrow_plan': [],
+            'next_week': [],
+            'no_date': [],
+            'total_count': 0
+        }
+
+    # 📌 2. Jira 이슈 파싱
+    issues = []
+    if JIRA_TOKEN:
+        try:
+            jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
+            # 모든 미완료 QART 이슈 및 최근 100개 파싱
+            jql = 'project = "QART" ORDER BY created DESC'
+            issues = jira.enhanced_search_issues(jql, maxResults=100)
+            print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
+        except Exception as e:
+            print(f"❌ Jira 연결 에러: {e}")
+    else:
+        print("⚠️ JIRA_API_TOKEN 환경 변수가 없어 Jira 조회를 건너뜁니다.")
+
     for i in issues:
-        assignee = str(i.fields.assignee.displayName) if i.fields.assignee else "미지정"
+        assignee_raw = str(i.fields.assignee.displayName) if i.fields.assignee else "미지정"
         status = i.fields.status.name
         
+        # 담당자 이름 매칭
+        matched_assignee = "미지정"
+        for t_name in TEAM_CALENDAR_EMAILS.keys():
+            if any(k in assignee_raw for k in ["리암", "김치영"]) and "리암" in t_name: matched_assignee = t_name; break
+            elif any(k in assignee_raw for k in ["베리", "강샛별"]) and "베리" in t_name: matched_assignee = t_name; break
+            elif any(k in assignee_raw for k in ["솔릭", "구건모"]) and "솔릭" in t_name: matched_assignee = t_name; break
+            elif any(k in assignee_raw for k in ["하퍼", "이하경"]) and "하퍼" in t_name: matched_assignee = t_name; break
+
+        if matched_assignee not in team_data:
+            if matched_assignee == "미지정":
+                team_data["미지정"] = {
+                    'today_meetings': [],
+                    'today_deploy': [],
+                    'today_progress': [],
+                    'tomorrow_plan': [],
+                    'next_week': [],
+                    'no_date': [],
+                    'total_count': 0
+                }
+
         start_date_str = get_field_value(i.fields, START_DATE_FIELDS)
         due_date_str = get_field_value(i.fields, DUE_DATE_FIELDS)
         deploy_date_str = get_field_value(i.fields, DEPLOY_DATE_FIELDS)
@@ -146,24 +175,6 @@ def get_team_dashboard_data():
         start_date = parse_date(start_date_str)
         due_date = parse_date(due_date_str)
         deploy_date = parse_date(deploy_date_str)
-
-        if assignee not in team_data:
-            cal_email = TEAM_CALENDAR_EMAILS.get(assignee, None)
-            
-            if "리암" in assignee or cal_email == "cy.kim2@pet-friends.co.kr":
-                cal_email = 'primary'
-
-            today_meetings = fetch_today_meetings(cal_service, cal_email, today)
-
-            team_data[assignee] = {
-                'today_meetings': today_meetings,
-                'today_deploy': [],
-                'today_progress': [],
-                'tomorrow_plan': [],
-                'next_week': [],
-                'no_date': [],
-                'total_count': 0
-            }
             
         issue_info = {
             'key': i.key,
@@ -176,7 +187,7 @@ def get_team_dashboard_data():
         }
         
         if deploy_date and deploy_date == today:
-            team_data[assignee]['today_deploy'].append(issue_info)
+            team_data[matched_assignee]['today_deploy'].append(issue_info)
 
         is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
 
@@ -188,7 +199,7 @@ def get_team_dashboard_data():
                 is_today_progress = True
 
             if is_today_progress:
-                team_data[assignee]['today_progress'].append(issue_info)
+                team_data[matched_assignee]['today_progress'].append(issue_info)
 
             is_tomorrow = False
             if start_date == tomorrow or due_date == tomorrow:
@@ -197,21 +208,21 @@ def get_team_dashboard_data():
                 is_tomorrow = True
 
             if is_tomorrow:
-                team_data[assignee]['tomorrow_plan'].append(issue_info)
+                team_data[matched_assignee]['tomorrow_plan'].append(issue_info)
 
             is_next_week = False
             if (start_date and start_date >= next_week_start) or (due_date and due_date >= next_week_start):
                 is_next_week = True
 
             if is_next_week:
-                team_data[assignee]['next_week'].append(issue_info)
+                team_data[matched_assignee]['next_week'].append(issue_info)
 
             if not start_date and not due_date and not deploy_date:
-                team_data[assignee]['no_date'].append(issue_info)
+                team_data[matched_assignee]['no_date'].append(issue_info)
             elif not is_today_progress and not is_tomorrow and not is_next_week and (deploy_date != today):
-                team_data[assignee]['no_date'].append(issue_info)
+                team_data[matched_assignee]['no_date'].append(issue_info)
 
-        team_data[assignee]['total_count'] += 1
+        team_data[matched_assignee]['total_count'] += 1
 
     print(f"✅ 총 {len(team_data)}개 담당 그룹 데이터 분류 완료!")
     return team_data, today, tomorrow, next_week_start
