@@ -9,16 +9,16 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# 📌 스프린트 설정
+# 📌 스프린트 설정 (단일 ID 문자열 또는 리스트 형식 모두 지원)
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",
+    "QART_SPRINT": "6643",  # 리스트로 사용할 경우: ["6643", "6645"]
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = 'cy.kim2@pet-friends.co.kr'
 
-# 🔒 보안 처리: GitHub Secrets의 JIRA_API_TOKEN 사용
+# 🔒 보안 처리: GitHub Secrets 또는 터미널 환경변수의 JIRA_API_TOKEN 사용
 JIRA_TOKEN = os.environ.get('JIRA_API_TOKEN')
 
 TEAM_CALENDAR_EMAILS = {
@@ -120,7 +120,7 @@ def get_team_dashboard_data():
 
     cal_service = get_calendar_service()
 
-    # 1. 팀원 기본 데이터 구조 생성 (이슈 여부와 무관하게 카드/회의 고정 표시)
+    # 1. 팀원 기본 데이터 구조 생성 (이슈가 없어도 카드/회의 일정은 고정 생성)
     team_data = {}
     for member_name, cal_email in TEAM_CALENDAR_EMAILS.items():
         read_email = 'primary' if "리암" in member_name or cal_email == JIRA_USER else cal_email
@@ -136,19 +136,28 @@ def get_team_dashboard_data():
             'total_count': 0
         }
 
-    # 2. Jira 이슈 파싱 (지정한 스프린트 사용)
+    # 2. Jira 이슈 파싱 (단일/다중 스프린트 자동 핸들링)
     issues = []
     if JIRA_TOKEN:
         try:
             jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
-            jql = f'project = "QART" AND sprint = {CONFIG["QART_SPRINT"]} ORDER BY created DESC'
-            print(f"🔍 [QART Sprint {CONFIG['QART_SPRINT']}] 데이터 추출 중...")
+            
+            sprints = CONFIG["QART_SPRINT"]
+            if isinstance(sprints, list):
+                sprint_ids = ", ".join([str(s).strip("'\"") for s in sprints])
+                sprint_jql = f"sprint in ({sprint_ids})"
+            else:
+                sprint_jql = f"sprint = {str(sprints).strip('\'\"')}"
+
+            jql = f'project = "QART" AND {sprint_jql} ORDER BY created DESC'
+            print(f"🔍 [QART Sprint] JQL 실행: {jql}")
+            
             issues = jira.enhanced_search_issues(jql, maxResults=False)
             print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
         except Exception as e:
-            print(f"❌ Jira 연결 에러: {e}")
+            print(f"❌ Jira 연결/조회 에러: {e}")
     else:
-        print("⚠️ JIRA_API_TOKEN 환경 변수가 없어 Jira 조회를 건너뜁니다.")
+        print("⚠️ JIRA_API_TOKEN 환경 변수가 설정되어 있지 않아 Jira 조회를 건너뜁니다.")
 
     for i in issues:
         assignee_raw = str(i.fields.assignee.displayName) if i.fields.assignee else "미지정"
