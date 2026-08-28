@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 # 📌 스프린트 설정 (단일 ID 문자열 또는 리스트 형식 모두 지원)
 CONFIG = {
     "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": "6643",  # 리스트로 사용할 경우: ["6643", "6645"]
+    "QART_SPRINT": ["6643", "6645"],
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
@@ -112,6 +112,9 @@ def parse_date(date_str):
     except Exception:
         return None
 
+def clean_sprint_str(val):
+    return str(val).replace('"', '').replace("'", "").strip()
+
 def get_team_dashboard_data():
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
@@ -120,7 +123,7 @@ def get_team_dashboard_data():
 
     cal_service = get_calendar_service()
 
-    # 1. 팀원 기본 데이터 구조 생성 (이슈가 없어도 카드/회의 일정은 고정 생성)
+    # 1. 팀원 기본 데이터 구조 생성
     team_data = {}
     for member_name, cal_email in TEAM_CALENDAR_EMAILS.items():
         read_email = 'primary' if "리암" in member_name or cal_email == JIRA_USER else cal_email
@@ -136,7 +139,7 @@ def get_team_dashboard_data():
             'total_count': 0
         }
 
-    # 2. Jira 이슈 파싱 (단일/다중 스프린트 자동 핸들링)
+    # 2. Jira 이슈 파싱 (f-string 내 백슬래시 제거 안전 처리)
     issues = []
     if JIRA_TOKEN:
         try:
@@ -144,10 +147,11 @@ def get_team_dashboard_data():
             
             sprints = CONFIG["QART_SPRINT"]
             if isinstance(sprints, list):
-                sprint_ids = ", ".join([str(s).strip("'\"") for s in sprints])
+                sprint_ids = ", ".join([clean_sprint_str(s) for s in sprints])
                 sprint_jql = f"sprint in ({sprint_ids})"
             else:
-                sprint_jql = f"sprint = {str(sprints).strip('\'\"')}"
+                sprint_ids = clean_sprint_str(sprints)
+                sprint_jql = f"sprint = {sprint_ids}"
 
             jql = f'project = "QART" AND {sprint_jql} ORDER BY created DESC'
             print(f"🔍 [QART Sprint] JQL 실행: {jql}")
