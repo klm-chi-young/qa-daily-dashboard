@@ -10,7 +10,7 @@ from jira import JIRA
 # ==========================================
 CONFIG = {
     "QART_SPRINT": ["6643", "6645"],  # QART 기본 스프린트 ID
-    "HOTFIX_SPRINT": "3174",         # QA 프로젝트 핫픽스 스프린트 ID (월별 변경)
+    "HOTFIX_SPRINT": "6741",         # QA 프로젝트 핫픽스 스프린트 ID (월별 변경)
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
