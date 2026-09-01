@@ -136,12 +136,16 @@ def get_weekly_dashboard_data():
 
     today = datetime.now().date()
     
-    # 📌 [주간 기준일 정밀 지정 (8/31 ~ 9/4)]
-    target_monday = today - timedelta(days=today.weekday())  # 2026-08-31
-    target_friday = target_monday + timedelta(days=4)        # 2026-09-04
+    # 📌 [새로운 날짜 기준일 설정: 화요일 ~ 차주 월요일]
+    # 오늘(화요일)부터 차주 월요일까지 계산
+    # 요일 코드: 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
+    offset_to_tuesday = (today.weekday() - 1) % 7
+    target_tuesday = today - timedelta(days=offset_to_tuesday)   # 가장 최근 화요일 (9/1)
+    target_next_monday = target_tuesday + timedelta(days=6)      # 차주 월요일 (9/7)
     
-    this_sunday = target_monday + timedelta(days=6)          # 2026-09-06
-    next_friday = target_monday + timedelta(days=11)        # 2026-09-11 (~다다음주 금요일)
+    # 진행 예정 마감일 (~ 다다음주 금요일 9/11)
+    this_monday = today - timedelta(days=today.weekday())
+    next_friday = this_monday + timedelta(days=11)
 
     # 1. 메인 QART 프로젝트 JQL
     sprints = CONFIG["QART_SPRINT"]
@@ -158,8 +162,8 @@ def get_weekly_dashboard_data():
     hotfix_sprint = clean_sprint_str(CONFIG["HOTFIX_SPRINT"])
     hotfix_jql = f'project = "QA" AND sprint = {hotfix_sprint}'
 
-    # 3. 버그 이슈 전용 JQL (8/31 ~ 9/4 사이 작성된 버그만)
-    bug_jql = f'project in ("QART", "QA") AND type = Bug AND created >= "{target_monday.strftime("%Y-%m-%d")}" AND created <= "{target_friday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
+    # 3. 버그 이슈 전용 JQL (화요일 ~ 차주 월요일 사이 작성된 버그만)
+    bug_jql = f'project in ("QART", "QA") AND type = Bug AND created >= "{target_tuesday.strftime("%Y-%m-%d")}" AND created <= "{target_next_monday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
 
     print(f"🔍 [QART 메인 JQL 실행]: {main_jql}")
     print(f"🔥 [QA 핫픽스 JQL 실행]: {hotfix_jql}")
@@ -249,10 +253,10 @@ def get_weekly_dashboard_data():
         is_qa_done = status in QA_DONE_STATUSES
         is_in_progress_status = status in IN_PROGRESS_STATUSES
 
-        # 📌 1) 버그/이슈티켓 (Bug): 8/31 ~ 9/4 사이 작성된 건만 보고자 기준 매칭
+        # 📌 1) 버그/이슈티켓 (Bug): 화요일 ~ 차주 월요일 사이 작성된 건만 매칭
         if is_bug:
             ensure_person(reporter_name)
-            if created_date and (target_monday <= created_date <= target_friday):
+            if created_date and (target_tuesday <= created_date <= target_next_monday):
                 if issue_info not in team_data[reporter_name]['bugs']:
                     team_data[reporter_name]['bugs'].append(issue_info)
             continue
@@ -269,16 +273,16 @@ def get_weekly_dashboard_data():
         for person in workers:
             ensure_person(person)
             if is_deploy_done or is_qa_done:
-                # 🎯 8/31 ~ 9/4 사이 배포/완료된 건만 1. 완료에 포함
+                # 🎯 화요일 ~ 차주 월요일 사이 배포/완료된 건만 1. 완료에 포함
                 check_finish_date = deploy_date or due_date or updated_date
-                if check_finish_date and (target_monday <= check_finish_date <= target_friday):
+                if check_finish_date and (target_tuesday <= check_finish_date <= target_next_monday):
                     if issue_info not in team_data[person]['completed_last_week']:
                         team_data[person]['completed_last_week'].append(issue_info)
 
             elif is_in_progress_status:
-                # 🎯 8/31 ~ 9/4 범위 내에 활동(작성일 또는 업데이트일)된 진행 중 건만 포함
+                # 🎯 화요일 ~ 차주 월요일 사이 활동(작성일/업데이트일)된 진행 중 건만 포함
                 check_active_date = updated_date or created_date
-                if check_active_date and (target_monday <= check_active_date <= target_friday):
+                if check_active_date and (target_tuesday <= check_active_date <= target_next_monday):
                     if issue_info not in team_data[person]['in_progress']:
                         team_data[person]['in_progress'].append(issue_info)
 
@@ -295,11 +299,11 @@ def get_weekly_dashboard_data():
         team_data[person]['planned_this_week'].sort(key=lambda x: x['plan_date'])
         team_data[person]['bugs'].sort(key=lambda x: x['created_date'] or datetime(9999, 12, 31).date(), reverse=True)
 
-    return team_data, target_monday, target_friday, target_monday, this_sunday, next_friday
+    return team_data, target_tuesday, target_next_monday, target_tuesday, target_next_monday, next_friday
 
-def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fri):
+def build_weekly_html(team_data, target_tue, target_next_mon, this_mon, this_sun, next_fri):
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
-    title_period = f"이번주 주간 보고({last_mon.strftime('%m/%d')}~{last_fri.strftime('%m/%d')}) & 계획(~{next_fri.strftime('%m/%d')})"
+    title_period = f"이번주 주간 보고({target_tue.strftime('%m/%d')}~{target_next_mon.strftime('%m/%d')}) & 계획(~{next_fri.strftime('%m/%d')})"
 
     sorted_members = sorted(team_data.keys(), key=lambda x: (x == "미지정", x))
 
@@ -472,8 +476,8 @@ if __name__ == "__main__":
         raise ValueError("❌ JIRA_API_TOKEN 환경변수가 설정되어 있지 않습니다.")
 
     print("🚀 주간 회의록(노션용) 생성 시작...")
-    data, l_mon, l_fri, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
-    html_out = build_weekly_html(data, l_mon, l_fri, t_mon, t_sun, n_fri)
+    data, t_tue, t_nmon, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
+    html_out = build_weekly_html(data, t_tue, t_nmon, t_mon, t_sun, n_fri)
     
     os.makedirs("weekly", exist_ok=True)
     with open("weekly/index.html", "w", encoding="utf-8") as f:
@@ -482,5 +486,5 @@ if __name__ == "__main__":
     print("🎉 성공! weekly/index.html 생성 완료!")
 
 def get_weekly_html():
-    data, l_mon, l_fri, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
-    return build_weekly_html(data, l_mon, l_fri, t_mon, t_sun, n_fri)
+    data, t_tue, t_nmon, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
+    return build_weekly_html(data, t_tue, t_nmon, t_sun, n_fri)
