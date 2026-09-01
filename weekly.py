@@ -21,7 +21,6 @@ START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_1014
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
 DEPLOY_DATE_FIELDS = ['customfield_10170', 'customfield_10203', 'customfield_10336']
 
-# 📌 배포까지 완전 종료된 상태 (배포일 표기 대상)
 DEPLOY_DONE_STATUSES = ['QA 완료(배포완료)', '배포 완료', '배포완료', 'Done', 'Closed', 'Resolved']
 QA_DONE_STATUSES = ['QA 진행완료', 'QA 진행 완료', 'QA진행완료', 'QA 완료']
 IN_PROGRESS_STATUSES = ['QA 진행중', 'QA 진행 중', 'TC 작성중', 'TC 작성 중', 'In Progress', '진행 중']
@@ -54,6 +53,7 @@ def format_short_date(date_obj):
     return f"{date_obj.month}/{date_obj.day}"
 
 def find_assignee_and_participants(jira, issue):
+    """일반 이슈용: 담당자 + 참여자 목록 추출"""
     people = set()
     if issue.fields.assignee:
         people.add(str(issue.fields.assignee.displayName))
@@ -74,7 +74,6 @@ def find_assignee_and_participants(jira, issue):
     return list(people)
 
 def extract_text_from_adf(data):
-    """Atlassian Document Format(ADF) 또는 복잡한 객체에서 텍스트만 추출"""
     if isinstance(data, str):
         return data
     elif isinstance(data, dict):
@@ -90,15 +89,12 @@ def extract_text_from_adf(data):
     return str(data) if data else ""
 
 def parse_hotfix_reason_details(raw_text):
-    """통으로 들어온 사유 텍스트를 이슈원인, 대응, TC존재여부로 정밀 구조화"""
     cause, action, tc_exists = "", "", ""
     if not raw_text:
         return cause, action, tc_exists
 
-    # 별표(*), 불렛, 콜론 등 특수문자 제거 정제
     clean_text = raw_text.replace('\r', '')
 
-    # 정규식 패턴 추출
     cause_match = re.search(r'(?:이슈\s*원인|원인)\s*[:\*]*\s*(.*?)(?=(?:대응|TC|TC\s*존재|$))', clean_text, re.DOTALL | re.IGNORECASE)
     action_match = re.search(r'대응\s*[:\*]*\s*(.*?)(?=(?:TC|TC\s*존재|$))', clean_text, re.DOTALL | re.IGNORECASE)
     tc_match = re.search(r'TC\s*존재\s*여부\s*[:\*]*\s*(.*)', clean_text, re.DOTALL | re.IGNORECASE)
@@ -110,16 +106,13 @@ def parse_hotfix_reason_details(raw_text):
     if tc_match:
         tc_exists = tc_match.group(1).strip(' *:\n\t')
 
-    # 파싱이 안 된 경우 전체 텍스트를 이슈 원인에 할당
     if not (cause or action or tc_exists):
         cause = raw_text.strip()
 
     return cause, action, tc_exists
 
 def get_hotfix_reason(jira, issue):
-    """지라 전체 필드 정의에서 '사유' 포함 커스텀필드를 자동 찾아 값 추출"""
     raw_fields = issue.raw.get('fields', {})
-    
     try:
         all_fields = jira.fields()
         reason_field_ids = [f['id'] for f in all_fields if '사유' in f['name']]
@@ -130,8 +123,7 @@ def get_hotfix_reason(jira, issue):
                 if res_text:
                     return res_text.strip()
     except Exception as e:
-        print(f"⚠️ 사유 필드 자동 검색 중 예외 발생: {e}")
-
+        print(f"⚠️ 사유 필드 자동 검색 예외: {e}")
     return ""
 
 def get_weekly_dashboard_data():
@@ -139,7 +131,6 @@ def get_weekly_dashboard_data():
     
     today = datetime.now().date()
     
-    # 📌 주간 날짜 기준 계산 (지난주 월요일 ~ 지난주 금요일)
     meeting_monday = today + timedelta(days=(0 - today.weekday()) % 7)
     last_monday = meeting_monday - timedelta(days=7)   # 지난주 월요일
     last_friday = meeting_monday - timedelta(days=3)   # 지난주 금요일
@@ -163,28 +154,47 @@ def get_weekly_dashboard_data():
     hotfix_sprint = clean_sprint_str(CONFIG["HOTFIX_SPRINT"])
     hotfix_jql = f'project = "QA" AND (issuetype in ("Hotfix", "HOTFIX", "핫픽스") OR type in ("Hotfix", "HOTFIX", "핫픽스")) AND sprint = {hotfix_sprint}'
 
+    # 3. 버그 이슈 전용 JQL
+    bug_jql = f'project in ("QART", "QA") AND type = Bug AND updated >= "{last_monday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
+
     print(f"🔍 [QART 메인 JQL 실행]: {main_jql}")
     print(f"🔥 [QA 핫픽스 JQL 실행]: {hotfix_jql}")
+    print(f"🐛 [버그 이슈 JQL 실행]: {bug_jql}")
     
     issues = []
     try:
         main_issues = jira.enhanced_search_issues(main_jql, maxResults=False)
         issues.extend(main_issues)
-        print(f"📦 [QART 메인 파싱 완료]: {len(main_issues)}개")
     except Exception as e:
         print(f"❌ 메인 JQL 조회 에러: {e}")
 
     try:
         hotfix_issues = jira.enhanced_search_issues(hotfix_jql, maxResults=False)
         issues.extend(hotfix_issues)
-        print(f"🔥 [QA 핫픽스 파싱 완료]: {len(hotfix_issues)}개")
     except Exception as e:
         print(f"❌ 핫픽스 JQL 조회 에러: {e}")
 
+    try:
+        bug_issues = jira.enhanced_search_issues(bug_jql, maxResults=False)
+        issues.extend(bug_issues)
+    except Exception as e:
+        print(f"❌ 버그 JQL 조회 에러: {e}")
+
     team_data = {}
-    
+
+    def ensure_person(person_name):
+        if person_name not in team_data:
+            team_data[person_name] = {
+                'hotfixes': [],
+                'completed_last_week': [],
+                'in_progress': [],
+                'planned_this_week': [],
+                'bugs': []
+            }
+
     for i in issues:
         status = i.fields.status.name.strip()
+        issue_type = str(getattr(i.fields.issuetype, 'name', ''))
         
         start_date_str = get_field_value(i.fields, START_DATE_FIELDS)
         due_date_str = get_field_value(i.fields, DUE_DATE_FIELDS)
@@ -193,21 +203,16 @@ def get_weekly_dashboard_data():
         start_date = parse_date(start_date_str)
         due_date = parse_date(due_date_str)
         deploy_date = parse_date(deploy_date_str)
+        created_date = parse_date(str(i.fields.created))
         updated_date = parse_date(str(i.fields.updated))
 
-        # 📌 핫픽스 여부 판별
-        is_hotfix = (i.fields.project.key == "QA") or ("Hotfix" in str(getattr(i.fields.issuetype, 'name', ''))) or ("핫픽스" in str(getattr(i.fields.issuetype, 'name', '')))
-        
-        # 📌 핫픽스 사유 추출 및 3대 항목으로 분리 파싱
+        is_hotfix = (i.fields.project.key == "QA") and ("Hotfix" in issue_type or "핫픽스" in issue_type)
+        is_bug = "Bug" in issue_type or "버그" in issue_type
+
         raw_reason = get_hotfix_reason(jira, i) if is_hotfix else ""
         cause, action, tc_exists = parse_hotfix_reason_details(raw_reason)
 
-        # 📌 핫픽스 티켓인 경우 '보고자(Reporter)' 기준 / 일반 티켓은 '담당자(Assignee)' 기준
-        if is_hotfix:
-            reporter_name = str(i.fields.reporter.displayName) if i.fields.reporter else "미지정"
-            workers = [reporter_name]
-        else:
-            workers = find_assignee_and_participants(jira, i)
+        reporter_name = str(i.fields.reporter.displayName) if i.fields.reporter else "미지정"
 
         target_plan_date = deploy_date or due_date or datetime(9999, 12, 31).date()
 
@@ -225,10 +230,12 @@ def get_weekly_dashboard_data():
             'status': status,
             'deploy_date': deploy_date,
             'due_date': due_date,
+            'created_date': created_date,
             'plan_date': target_plan_date,
             'badge_label': badge_label,
             'date_str': date_str_val,
             'is_hotfix': is_hotfix,
+            'is_bug': is_bug,
             'cause': cause,
             'action': action,
             'tc_exists': tc_exists
@@ -238,24 +245,27 @@ def get_weekly_dashboard_data():
         is_qa_done = status in QA_DONE_STATUSES
         is_in_progress_status = status in IN_PROGRESS_STATUSES
 
+        # 📌 1) 핫픽스: 보고자(Reporter) 기준 매칭
+        if is_hotfix:
+            ensure_person(reporter_name)
+            target_date = deploy_date or due_date or updated_date
+            if (target_date and (last_monday <= target_date <= last_friday)) or is_deploy_done or is_qa_done or (not target_date):
+                if issue_info not in team_data[reporter_name]['hotfixes']:
+                    team_data[reporter_name]['hotfixes'].append(issue_info)
+            continue
+
+        # 📌 2) 4. 이슈내역 (Bug): 보고자(Reporter) 기준 매칭
+        if is_bug:
+            ensure_person(reporter_name)
+            if created_date and (created_date >= last_monday) or is_in_progress_status:
+                if issue_info not in team_data[reporter_name]['bugs']:
+                    team_data[reporter_name]['bugs'].append(issue_info)
+            continue
+
+        # 📌 3) 1~3번 일반 스프린트 이슈: 담당자(Assignee) / 참여자 기준 매칭
+        workers = find_assignee_and_participants(jira, i)
         for person in workers:
-            if person not in team_data:
-                team_data[person] = {
-                    'hotfixes': [],
-                    'completed_last_week': [],
-                    'in_progress': [],
-                    'planned_this_week': [],
-                }
-
-            # 📌 핫픽스 전용 분류
-            if is_hotfix:
-                target_date = deploy_date or due_date or updated_date
-                if (target_date and (last_monday <= target_date <= last_friday)) or is_deploy_done or is_qa_done or (not target_date):
-                    if issue_info not in team_data[person]['hotfixes']:
-                        team_data[person]['hotfixes'].append(issue_info)
-                continue
-
-            # 📌 일반 이슈 분류
+            ensure_person(person)
             if is_deploy_done:
                 if deploy_date and (last_monday <= deploy_date <= last_friday):
                     if issue_info not in team_data[person]['completed_last_week']:
@@ -282,6 +292,7 @@ def get_weekly_dashboard_data():
         team_data[person]['completed_last_week'].sort(key=lambda x: x['deploy_date'] or datetime(9999, 12, 31).date())
         team_data[person]['in_progress'].sort(key=lambda x: x['plan_date'])
         team_data[person]['planned_this_week'].sort(key=lambda x: x['plan_date'])
+        team_data[person]['bugs'].sort(key=lambda x: x['created_date'] or datetime(9999, 12, 31).date(), reverse=True)
 
     return team_data, last_monday, last_friday, this_monday, this_sunday, next_friday
 
@@ -289,6 +300,7 @@ def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fr
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
     title_period = f"지난주 성과({last_mon.strftime('%m/%d')}~{last_fri.strftime('%m/%d')}) & 이번주 계획({this_mon.strftime('%m/%d')}~{this_sun.strftime('%m/%d')})"
 
+    # 동적으로 추출된 사용자 목록 중 '미지정'을 맨 뒤로 보내고 정렬
     sorted_members = sorted(team_data.keys(), key=lambda x: (x == "미지정", x))
 
     member_cards_html = ""
@@ -299,9 +311,12 @@ def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fr
         data = team_data[member]
 
         def format_markdown_section(title, issue_list):
+            count = len(issue_list)
+            sec_md = f"**{title} ({count}건)**\n"
             if not issue_list:
-                return ""
-            sec_md = f"**{title}**\n"
+                sec_md += "- 없음\n\n"
+                return sec_md
+                
             for item in issue_list:
                 sec_md += f"- **[{item['summary']}]({item['link']})** `{item['badge_label']} : {item['date_str']}`\n"
                 if item.get('is_hotfix'):
@@ -313,10 +328,12 @@ def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fr
             return sec_md
 
         member_notion_md = ""
-        member_notion_md += format_markdown_section("Hotfix", data['hotfixes'])
-        member_notion_md += format_markdown_section("완료", data['completed_last_week'])
-        member_notion_md += format_markdown_section("진행중", data['in_progress'])
-        member_notion_md += format_markdown_section(f"진행예정 (~{next_fri.strftime('%m/%d')})", data['planned_this_week'])
+        if data['hotfixes']:
+            member_notion_md += format_markdown_section(f"Hotfix ({len(data['hotfixes'])}건)", data['hotfixes'])
+        member_notion_md += format_markdown_section("1. 완료", data['completed_last_week'])
+        member_notion_md += format_markdown_section("2. 진행중", data['in_progress'])
+        member_notion_md += format_markdown_section(f"3. 진행예정 (~{next_fri.strftime('%m/%d')})", data['planned_this_week'])
+        member_notion_md += format_markdown_section("4. 이슈", data['bugs'])
 
         notion_full_text += f"👤 {member}\n" + member_notion_md
 
@@ -344,13 +361,12 @@ def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fr
             html += "</ul>"
             return html
 
-        # 📌 Hotfix 영역: 티켓이 있을 때만 HTML 생성
         hotfix_section_html = ""
         if data['hotfixes']:
             hotfix_section_html = f"""
             <div style="margin-bottom:14px; background:#fef2f2; border:1px solid #fca5a5; padding:12px; border-radius:8px;">
                 <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                    🔥 Hotfix
+                    🔥 Hotfix ({len(data['hotfixes'])}건)
                 </div>
                 {render_links(data['hotfixes'], is_hotfix_sec=True)}
             </div>
@@ -366,18 +382,23 @@ def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fr
             {hotfix_section_html}
 
             <div style="margin-bottom:14px;">
-                <div style="font-size:14px; font-weight:700; color:#16a34a; margin-bottom:6px;">1. 완료</div>
+                <div style="font-size:14px; font-weight:700; color:#16a34a; margin-bottom:6px;">1. 완료 ({len(data['completed_last_week'])}건)</div>
                 {render_links(data['completed_last_week'])}
             </div>
 
             <div style="margin-bottom:14px;">
-                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px;">2. 진행 중</div>
+                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px;">2. 진행 중 ({len(data['in_progress'])}건)</div>
                 {render_links(data['in_progress'])}
             </div>
 
-            <div>
-                <div style="font-size:14px; font-weight:700; color:#4f46e5; margin-bottom:6px;">3. 진행 예정 (~{next_fri.strftime('%m/%d')} 금)</div>
+            <div style="margin-bottom:14px;">
+                <div style="font-size:14px; font-weight:700; color:#4f46e5; margin-bottom:6px;">3. 진행 예정 ({len(data['planned_this_week'])}건, ~{next_fri.strftime('%m/%d')} 금)</div>
                 {render_links(data['planned_this_week'])}
+            </div>
+
+            <div>
+                <div style="font-size:14px; font-weight:700; color:#d97706; margin-bottom:6px;">4. 이슈 ({len(data['bugs'])}건)</div>
+                {render_links(data['bugs'])}
             </div>
 
             <textarea id="memberText_{idx}" style="display:none;">{member_notion_md}</textarea>
