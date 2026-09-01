@@ -329,10 +329,12 @@ if __name__ == "__main__":
     data, l_tue, l_sun, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
     html_out = build_weekly_html(data, l_tue, l_sun, t_mon, t_sun, n_fri)
     
-    with open("weekly.html", "w", encoding="utf-8") as f:
+    # 📌 weekly 폴더를 자동 생성하고 그 안에 index.html로 저장
+    os.makedirs("weekly", exist_ok=True)
+    with open("weekly/index.html", "w", encoding="utf-8") as f:
         f.write(html_out)
         
-    print("🎉 성공! weekly.html 생성 완료!")
+    print("🎉 성공! weekly/index.html 생성 완료!")
 
 def get_weekly_html():
     data, l_tue, l_sun, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
