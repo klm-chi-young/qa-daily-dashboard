@@ -23,7 +23,7 @@
             <div class="header">
                 <div>
                     <div class="title">📋 QART 팀 주간 회의록</div>
-                    <div class="sub">지난주 성과(08/31~09/04) & 이번주 계획(09/07~09/13) | 생성시각: 2026-09-01 06:39</div>
+                    <div class="sub">지난주 성과(08/31~09/04) & 이번주 계획(09/07~09/13) | 생성시각: 2026-09-01 06:41</div>
                 </div>
                 <button class="copy-btn" id="btn_notionFullText" onclick="copyTextToClipboard('notionFullText', 'btn_notionFullText')">📋 팀 전체 복사</button>
             </div>
@@ -35,45 +35,6 @@
                 <button class="member-copy-btn" id="btn_memberText_0" onclick="copyTextToClipboard('memberText_0', 'btn_memberText_0')">📋 리암(Liam/ 김치영)님 목록 복사 (이름 제외)</button>
             </div>
 
-            
-            <div style="margin-bottom:14px; background:#fef2f2; border:1px solid #fca5a5; padding:12px; border-radius:8px;">
-                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                    🔥 Hotfix
-                </div>
-                <ul style='margin-left:20px; font-size:13px; line-height:1.8; color:#334155;'><li style='margin-bottom:8px;'>
-                    <a href='https://pet-friends.atlassian.net/browse/QA-3857' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>[Hotfix] 상품상세 > 상품상세 접근시 오류팝업 노출되며 접근불가(구매후기 리펙토링 배포 영향으로 롤백)</a>
-                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>QA 완료</span>
-                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/9</span>
-                    
-                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
-                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
-                        <div>• 이슈원인 : 구매후기 리펙토링 작업에서 발생 
-** 이전에 상품 리뷰 저장시 이미지 테이블과 새로 추가한 presigend url로 이미지 경로를 저장한 이미지 테이블 두 곳에 이미지를 저장
-*** 이미지 조회시 새로 추가했던 테이블을 조회하여 이미지 경로를 응답시 조회하는 코드에서 이슈발생 (원인파악중)</div>
-                        <div>• 대응 : 9/9일 15시 배포 후 롤백15시 50분경 롤백 완료 후 모니러링</div>
-                        <div>• TC존재여부 : X</div>
-                    </div>
-                    
-                </li><li style='margin-bottom:8px;'>
-                    <a href='https://pet-friends.atlassian.net/browse/QA-3975' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>[Hotfix] 로그인 > 로그인 시도시 느리게 로그인 처리 됨 (약 33초)</a>
-                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>QA 완료</span>
-                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/29</span>
-                    
-                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
-                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
-                        <div>• 이슈원인 : [https://pet-friends.atlassian.net/browse/PODEV-492|https://pet-friends.atlassian.net/browse/PODEV-492|smart-link] 사이드 이팩
-*** QABypass
-*** AS-IS
-{noformat}const { expireDate } = authManagerClientSide();{noformat}
-TO-BE
-{noformat} const expireDateFromCookie = ge</div>
-                        <div>• 대응 : 해당건 롤백 처리 
-**  [https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|smart-link]</div>
-                        <div>• TC존재여부 : X</div>
-                    </div>
-                    
-                </li></ul>
-            </div>
             
 
             <div style="margin-bottom:14px;">
@@ -131,27 +92,7 @@ TO-BE
                 </li></ul>
             </div>
 
-            <textarea id="memberText_0" style="display:none;">**Hotfix**
-- **[[Hotfix] 상품상세 > 상품상세 접근시 오류팝업 노출되며 접근불가(구매후기 리펙토링 배포 영향으로 롤백)](https://pet-friends.atlassian.net/browse/QA-3857)** `배포 예정일 : 9/9`
-  - 사유
-    - 이슈원인 : 구매후기 리펙토링 작업에서 발생 
-** 이전에 상품 리뷰 저장시 이미지 테이블과 새로 추가한 presigend url로 이미지 경로를 저장한 이미지 테이블 두 곳에 이미지를 저장
-*** 이미지 조회시 새로 추가했던 테이블을 조회하여 이미지 경로를 응답시 조회하는 코드에서 이슈발생 (원인파악중)
-    - 대응 : 9/9일 15시 배포 후 롤백15시 50분경 롤백 완료 후 모니러링
-    - TC존재여부 : X
-- **[[Hotfix] 로그인 > 로그인 시도시 느리게 로그인 처리 됨 (약 33초)](https://pet-friends.atlassian.net/browse/QA-3975)** `배포 예정일 : 9/29`
-  - 사유
-    - 이슈원인 : [https://pet-friends.atlassian.net/browse/PODEV-492|https://pet-friends.atlassian.net/browse/PODEV-492|smart-link] 사이드 이팩
-*** QABypass
-*** AS-IS
-{noformat}const { expireDate } = authManagerClientSide();{noformat}
-TO-BE
-{noformat} const expireDateFromCookie = ge
-    - 대응 : 해당건 롤백 처리 
-**  [https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|smart-link]
-    - TC존재여부 : X
-
-**완료**
+            <textarea id="memberText_0" style="display:none;">**완료**
 - **[[모바일] CRM 쿠폰 랜딩 페이지 비정상 pageId 접근 방어로직 개선](https://pet-friends.atlassian.net/browse/QART-2285)** `배포일 : 8/31`
 - **[[모바일] 상품상세 캡차 커스텀 페이지 적용](https://pet-friends.atlassian.net/browse/QART-2292)** `배포 예정일 : 9/1`
 - **[[모바일] 9월 심쿵펫페어 로고 이미지 교체](https://pet-friends.atlassian.net/browse/QART-2291)** `배포 예정일 : 9/1`
@@ -174,42 +115,6 @@ TO-BE
                 <button class="member-copy-btn" id="btn_memberText_1" onclick="copyTextToClipboard('memberText_1', 'btn_memberText_1')">📋 베리(Berry/강샛별)님 목록 복사 (이름 제외)</button>
             </div>
 
-            
-            <div style="margin-bottom:14px; background:#fef2f2; border:1px solid #fca5a5; padding:12px; border-radius:8px;">
-                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                    🔥 Hotfix
-                </div>
-                <ul style='margin-left:20px; font-size:13px; line-height:1.8; color:#334155;'><li style='margin-bottom:8px;'>
-                    <a href='https://pet-friends.atlassian.net/browse/QA-3859' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>[Hotfix] 수요특가(특가상품) 탭 구좌에 쿠폰적용가 미적용되어 가격 노출</a>
-                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>QA 완료</span>
-                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/10</span>
-                    
-                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
-                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
-                        <div>• 이슈원인 : {{[특가상품]네모 타입 }}
-** {{[상품]테마 타입(기존테마)}}
-{{[특가상품]특가세로(1*X)}}
-{{[특가상품]특가가로(2*2)}}
-** 쿠폰적용가 적용 구좌에 위 타입이 누락되어있었음.</div>
-                        <div>• 대응 : 누락된 타입에도 적용되도록 수정하여 stg 체크후 상용배포
-*** 배포 : 9/10(수) 오후 2시</div>
-                        <div>• TC존재여부 : X (구좌별로 확인하긴 했으나 컴포넌트 타입별로 나눠보진 않음)</div>
-                    </div>
-                    
-                </li><li style='margin-bottom:8px;'>
-                    <a href='https://pet-friends.atlassian.net/browse/QA-3873' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>[Hotfix] 실적 0인 품목 있는 주문건 상태 업데이트시 센트리 에러 발생</a>
-                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>QA 완료</span>
-                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/15</span>
-                    
-                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
-                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
-                        <div>• 이슈원인 : 예외처리 누락</div>
-                        <div>• 대응 : dev QA 후 9/15 오후 8시경 HOTFIX 배포</div>
-                        <div>• TC존재여부 : X</div>
-                    </div>
-                    
-                </li></ul>
-            </div>
             
 
             <div style="margin-bottom:14px;">
@@ -262,24 +167,7 @@ TO-BE
                 </li></ul>
             </div>
 
-            <textarea id="memberText_1" style="display:none;">**Hotfix**
-- **[[Hotfix] 수요특가(특가상품) 탭 구좌에 쿠폰적용가 미적용되어 가격 노출](https://pet-friends.atlassian.net/browse/QA-3859)** `배포 예정일 : 9/10`
-  - 사유
-    - 이슈원인 : {{[특가상품]네모 타입 }}
-** {{[상품]테마 타입(기존테마)}}
-{{[특가상품]특가세로(1*X)}}
-{{[특가상품]특가가로(2*2)}}
-** 쿠폰적용가 적용 구좌에 위 타입이 누락되어있었음.
-    - 대응 : 누락된 타입에도 적용되도록 수정하여 stg 체크후 상용배포
-*** 배포 : 9/10(수) 오후 2시
-    - TC존재여부 : X (구좌별로 확인하긴 했으나 컴포넌트 타입별로 나눠보진 않음)
-- **[[Hotfix] 실적 0인 품목 있는 주문건 상태 업데이트시 센트리 에러 발생](https://pet-friends.atlassian.net/browse/QA-3873)** `배포 예정일 : 9/15`
-  - 사유
-    - 이슈원인 : 예외처리 누락
-    - 대응 : dev QA 후 9/15 오후 8시경 HOTFIX 배포
-    - TC존재여부 : X
-
-**완료**
+            <textarea id="memberText_1" style="display:none;">**완료**
 - **[[모바일] AI 사료 추천 > 상용 상품 속성DB 연결 작업](https://pet-friends.atlassian.net/browse/QART-2290)** `배포일 : 9/1`
 - **[[판매자어드민] 프로모션 세팅 기능화 및 파트너쿠폰 자동 발행 QA](https://pet-friends.atlassian.net/browse/QART-2150)** `배포 예정일 : 9/1`
 - **[[모바일] AI CS 업체 연동](https://pet-friends.atlassian.net/browse/QART-2069)** `배포 예정일 : 8/28`
@@ -299,6 +187,25 @@ TO-BE
                 <button class="member-copy-btn" id="btn_memberText_2" onclick="copyTextToClipboard('memberText_2', 'btn_memberText_2')">📋 솔릭(Solric/구건모)님 목록 복사 (이름 제외)</button>
             </div>
 
+            
+            <div style="margin-bottom:14px; background:#fef2f2; border:1px solid #fca5a5; padding:12px; border-radius:8px;">
+                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    🔥 Hotfix
+                </div>
+                <ul style='margin-left:20px; font-size:13px; line-height:1.8; color:#334155;'><li style='margin-bottom:8px;'>
+                    <a href='https://pet-friends.atlassian.net/browse/QA-6029' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>테스트 티켓 </a>
+                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>해야 할 일</span>
+                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/1</span>
+                    
+                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
+                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
+                        <div>• 이슈원인 : 테스트</div>
+                        <div>• 대응 : 입니다</div>
+                        <div>• TC존재여부 : O</div>
+                    </div>
+                    
+                </li></ul>
+            </div>
             
 
             <div style="margin-bottom:14px;">
@@ -346,7 +253,14 @@ TO-BE
                 </li></ul>
             </div>
 
-            <textarea id="memberText_2" style="display:none;">**완료**
+            <textarea id="memberText_2" style="display:none;">**Hotfix**
+- **[테스트 티켓 ](https://pet-friends.atlassian.net/browse/QA-6029)** `배포 예정일 : 9/1`
+  - 사유
+    - 이슈원인 : 테스트
+    - 대응 : 입니다
+    - TC존재여부 : O
+
+**완료**
 - **[[Android] 8월 정기배포 리스트](https://pet-friends.atlassian.net/browse/QART-2259)** `배포일 : 8/31`
 - **[[모바일] [iOS] 8월 정기배포](https://pet-friends.atlassian.net/browse/QART-2253)** `배포일 : 8/31`
 - **[[검색] OpenSearch host 시크릿 이관(.env→Secrets Manager) QA](https://pet-friends.atlassian.net/browse/QART-2295)** `배포 예정일 : 9/3`
@@ -414,26 +328,6 @@ TO-BE
         <textarea id="notionFullText" style="display:none;">📋 QART 팀 주간 회의록 (지난주 성과(08/31~09/04) & 이번주 계획(09/07~09/13))
 
 👤 리암(Liam/ 김치영)
-**Hotfix**
-- **[[Hotfix] 상품상세 > 상품상세 접근시 오류팝업 노출되며 접근불가(구매후기 리펙토링 배포 영향으로 롤백)](https://pet-friends.atlassian.net/browse/QA-3857)** `배포 예정일 : 9/9`
-  - 사유
-    - 이슈원인 : 구매후기 리펙토링 작업에서 발생 
-** 이전에 상품 리뷰 저장시 이미지 테이블과 새로 추가한 presigend url로 이미지 경로를 저장한 이미지 테이블 두 곳에 이미지를 저장
-*** 이미지 조회시 새로 추가했던 테이블을 조회하여 이미지 경로를 응답시 조회하는 코드에서 이슈발생 (원인파악중)
-    - 대응 : 9/9일 15시 배포 후 롤백15시 50분경 롤백 완료 후 모니러링
-    - TC존재여부 : X
-- **[[Hotfix] 로그인 > 로그인 시도시 느리게 로그인 처리 됨 (약 33초)](https://pet-friends.atlassian.net/browse/QA-3975)** `배포 예정일 : 9/29`
-  - 사유
-    - 이슈원인 : [https://pet-friends.atlassian.net/browse/PODEV-492|https://pet-friends.atlassian.net/browse/PODEV-492|smart-link] 사이드 이팩
-*** QABypass
-*** AS-IS
-{noformat}const { expireDate } = authManagerClientSide();{noformat}
-TO-BE
-{noformat} const expireDateFromCookie = ge
-    - 대응 : 해당건 롤백 처리 
-**  [https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|https://teampetfriends.slack.com/archives/C01N7ETBTAT/p1759127716811159?thread_ts=1759107995.317459&cid=C01N7ETBTAT|smart-link]
-    - TC존재여부 : X
-
 **완료**
 - **[[모바일] CRM 쿠폰 랜딩 페이지 비정상 pageId 접근 방어로직 개선](https://pet-friends.atlassian.net/browse/QART-2285)** `배포일 : 8/31`
 - **[[모바일] 상품상세 캡차 커스텀 페이지 적용](https://pet-friends.atlassian.net/browse/QART-2292)** `배포 예정일 : 9/1`
@@ -449,23 +343,6 @@ TO-BE
 - **[[판매자어드민] 정산 시스템 통합 및 대시보드 구축 (1차)](https://pet-friends.atlassian.net/browse/QART-2268)** `배포 예정일 : 9/21`
 
 👤 베리(Berry/강샛별)
-**Hotfix**
-- **[[Hotfix] 수요특가(특가상품) 탭 구좌에 쿠폰적용가 미적용되어 가격 노출](https://pet-friends.atlassian.net/browse/QA-3859)** `배포 예정일 : 9/10`
-  - 사유
-    - 이슈원인 : {{[특가상품]네모 타입 }}
-** {{[상품]테마 타입(기존테마)}}
-{{[특가상품]특가세로(1*X)}}
-{{[특가상품]특가가로(2*2)}}
-** 쿠폰적용가 적용 구좌에 위 타입이 누락되어있었음.
-    - 대응 : 누락된 타입에도 적용되도록 수정하여 stg 체크후 상용배포
-*** 배포 : 9/10(수) 오후 2시
-    - TC존재여부 : X (구좌별로 확인하긴 했으나 컴포넌트 타입별로 나눠보진 않음)
-- **[[Hotfix] 실적 0인 품목 있는 주문건 상태 업데이트시 센트리 에러 발생](https://pet-friends.atlassian.net/browse/QA-3873)** `배포 예정일 : 9/15`
-  - 사유
-    - 이슈원인 : 예외처리 누락
-    - 대응 : dev QA 후 9/15 오후 8시경 HOTFIX 배포
-    - TC존재여부 : X
-
 **완료**
 - **[[모바일] AI 사료 추천 > 상용 상품 속성DB 연결 작업](https://pet-friends.atlassian.net/browse/QART-2290)** `배포일 : 9/1`
 - **[[판매자어드민] 프로모션 세팅 기능화 및 파트너쿠폰 자동 발행 QA](https://pet-friends.atlassian.net/browse/QART-2150)** `배포 예정일 : 9/1`
@@ -478,6 +355,13 @@ TO-BE
 - **[[모바일/HQ] 상품쿠폰 - 행사/세그먼트 조건별 매칭·발급·회수 고도화](https://pet-friends.atlassian.net/browse/QART-2266)** `배포 예정일 : 9/17`
 
 👤 솔릭(Solric/구건모)
+**Hotfix**
+- **[테스트 티켓 ](https://pet-friends.atlassian.net/browse/QA-6029)** `배포 예정일 : 9/1`
+  - 사유
+    - 이슈원인 : 테스트
+    - 대응 : 입니다
+    - TC존재여부 : O
+
 **완료**
 - **[[Android] 8월 정기배포 리스트](https://pet-friends.atlassian.net/browse/QART-2259)** `배포일 : 8/31`
 - **[[모바일] [iOS] 8월 정기배포](https://pet-friends.atlassian.net/browse/QART-2253)** `배포일 : 8/31`
