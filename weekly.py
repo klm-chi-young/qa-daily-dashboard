@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from jira import JIRA
 
 # ==========================================
@@ -43,7 +43,10 @@ def parse_date(date_str):
     if not date_str:
         return None
     try:
-        return datetime.strptime(date_str[:10], '%Y-%m-%d').date()
+        val_str = str(date_str)
+        if 'T' in val_str:
+            val_str = val_str.split('T')[0]
+        return datetime.strptime(val_str[:10], '%Y-%m-%d').date()
     except Exception:
         return None
 
@@ -111,33 +114,34 @@ def parse_hotfix_reason_details(raw_text):
 
     return cause, action, tc_exists
 
-def get_hotfix_reason(jira, issue):
+def get_hotfix_reason(issue, reason_field_ids):
     raw_fields = issue.raw.get('fields', {})
-    try:
-        all_fields = jira.fields()
-        reason_field_ids = [f['id'] for f in all_fields if '사유' in f['name']]
-        for fid in reason_field_ids:
-            val = raw_fields.get(fid)
-            if val:
-                res_text = extract_text_from_adf(val)
-                if res_text:
-                    return res_text.strip()
-    except Exception as e:
-        print(f"⚠️ 사유 필드 자동 검색 예외: {e}")
+    for fid in reason_field_ids:
+        val = raw_fields.get(fid)
+        if val:
+            res_text = extract_text_from_adf(val)
+            if res_text:
+                return res_text.strip()
     return ""
 
 def get_weekly_dashboard_data():
     jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
     
+    reason_field_ids = []
+    try:
+        all_fields = jira.fields()
+        reason_field_ids = [f['id'] for f in all_fields if '사유' in f['name']]
+    except Exception as e:
+        print(f"⚠️ 사유 필드 목록 조회 실패: {e}")
+
     today = datetime.now().date()
     
-    meeting_monday = today + timedelta(days=(0 - today.weekday()) % 7)
-    last_monday = meeting_monday - timedelta(days=7)   # 지난주 월요일
-    last_friday = meeting_monday - timedelta(days=3)   # 지난주 금요일
+    # 📌 [주간 기준일 정밀 지정 (8/31 ~ 9/4)]
+    target_monday = today - timedelta(days=today.weekday())  # 2026-08-31
+    target_friday = target_monday + timedelta(days=4)        # 2026-09-04
     
-    this_monday = meeting_monday                        # 이번주 월요일
-    this_sunday = meeting_monday + timedelta(days=6)    # 이번주 일요일
-    next_friday = this_monday + timedelta(days=11)
+    this_sunday = target_monday + timedelta(days=6)          # 2026-09-06
+    next_friday = target_monday + timedelta(days=11)        # 2026-09-11 (~다다음주 금요일)
 
     # 1. 메인 QART 프로젝트 JQL
     sprints = CONFIG["QART_SPRINT"]
@@ -152,10 +156,10 @@ def get_weekly_dashboard_data():
     
     # 2. QA 프로젝트 핫픽스 전용 JQL
     hotfix_sprint = clean_sprint_str(CONFIG["HOTFIX_SPRINT"])
-    hotfix_jql = f'project = "QA" AND (issuetype in ("Hotfix", "HOTFIX", "핫픽스") OR type in ("Hotfix", "HOTFIX", "핫픽스")) AND sprint = {hotfix_sprint}'
+    hotfix_jql = f'project = "QA" AND sprint = {hotfix_sprint}'
 
-    # 3. 버그 이슈 전용 JQL
-    bug_jql = f'project in ("QART", "QA") AND type = Bug AND updated >= "{last_monday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
+    # 3. 버그 이슈 전용 JQL (8/31 ~ 9/4 사이 작성된 버그만)
+    bug_jql = f'project in ("QART", "QA") AND type = Bug AND created >= "{target_monday.strftime("%Y-%m-%d")}" AND created <= "{target_friday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
 
     print(f"🔍 [QART 메인 JQL 실행]: {main_jql}")
     print(f"🔥 [QA 핫픽스 JQL 실행]: {hotfix_jql}")
@@ -206,10 +210,10 @@ def get_weekly_dashboard_data():
         created_date = parse_date(str(i.fields.created))
         updated_date = parse_date(str(i.fields.updated))
 
-        is_hotfix = (i.fields.project.key == "QA") and ("Hotfix" in issue_type or "핫픽스" in issue_type)
-        is_bug = "Bug" in issue_type or "버그" in issue_type
+        is_bug = ("Bug" in issue_type) or ("버그" in issue_type)
+        is_hotfix = not is_bug and ((i.fields.project.key == "QA") or ("Hotfix" in issue_type) or ("핫픽스" in issue_type))
 
-        raw_reason = get_hotfix_reason(jira, i) if is_hotfix else ""
+        raw_reason = get_hotfix_reason(i, reason_field_ids) if is_hotfix else ""
         cause, action, tc_exists = parse_hotfix_reason_details(raw_reason)
 
         reporter_name = str(i.fields.reporter.displayName) if i.fields.reporter else "미지정"
@@ -245,41 +249,38 @@ def get_weekly_dashboard_data():
         is_qa_done = status in QA_DONE_STATUSES
         is_in_progress_status = status in IN_PROGRESS_STATUSES
 
-        # 📌 1) 핫픽스: 보고자(Reporter) 기준 매칭
-        if is_hotfix:
-            ensure_person(reporter_name)
-            target_date = deploy_date or due_date or updated_date
-            if (target_date and (last_monday <= target_date <= last_friday)) or is_deploy_done or is_qa_done or (not target_date):
-                if issue_info not in team_data[reporter_name]['hotfixes']:
-                    team_data[reporter_name]['hotfixes'].append(issue_info)
-            continue
-
-        # 📌 2) 4. 이슈내역 (Bug): 보고자(Reporter) 기준 매칭
+        # 📌 1) 버그/이슈티켓 (Bug): 8/31 ~ 9/4 사이 작성된 건만 보고자 기준 매칭
         if is_bug:
             ensure_person(reporter_name)
-            if created_date and (created_date >= last_monday) or is_in_progress_status:
+            if created_date and (target_monday <= created_date <= target_friday):
                 if issue_info not in team_data[reporter_name]['bugs']:
                     team_data[reporter_name]['bugs'].append(issue_info)
+            continue
+
+        # 📌 2) 핫픽스 (Hotfix): QA 프로젝트 보고자(Reporter) 기준 매칭
+        if is_hotfix:
+            ensure_person(reporter_name)
+            if issue_info not in team_data[reporter_name]['hotfixes']:
+                team_data[reporter_name]['hotfixes'].append(issue_info)
             continue
 
         # 📌 3) 1~3번 일반 스프린트 이슈: 담당자(Assignee) / 참여자 기준 매칭
         workers = find_assignee_and_participants(jira, i)
         for person in workers:
             ensure_person(person)
-            if is_deploy_done:
-                if deploy_date and (last_monday <= deploy_date <= last_friday):
+            if is_deploy_done or is_qa_done:
+                # 🎯 8/31 ~ 9/4 사이 배포/완료된 건만 1. 완료에 포함
+                check_finish_date = deploy_date or due_date or updated_date
+                if check_finish_date and (target_monday <= check_finish_date <= target_friday):
                     if issue_info not in team_data[person]['completed_last_week']:
                         team_data[person]['completed_last_week'].append(issue_info)
-                elif not deploy_date:
-                    if issue_info not in team_data[person]['completed_last_week']:
-                        team_data[person]['completed_last_week'].append(issue_info)
-            elif is_qa_done:
-                if issue_info not in team_data[person]['completed_last_week']:
-                    team_data[person]['completed_last_week'].append(issue_info)
 
             elif is_in_progress_status:
-                if issue_info not in team_data[person]['in_progress']:
-                    team_data[person]['in_progress'].append(issue_info)
+                # 🎯 8/31 ~ 9/4 범위 내에 활동(작성일 또는 업데이트일)된 진행 중 건만 포함
+                check_active_date = updated_date or created_date
+                if check_active_date and (target_monday <= check_active_date <= target_friday):
+                    if issue_info not in team_data[person]['in_progress']:
+                        team_data[person]['in_progress'].append(issue_info)
 
             elif status in PLANNED_STATUSES or not (is_deploy_done or is_qa_done or is_in_progress_status):
                 check_date = start_date or deploy_date or due_date
@@ -294,13 +295,12 @@ def get_weekly_dashboard_data():
         team_data[person]['planned_this_week'].sort(key=lambda x: x['plan_date'])
         team_data[person]['bugs'].sort(key=lambda x: x['created_date'] or datetime(9999, 12, 31).date(), reverse=True)
 
-    return team_data, last_monday, last_friday, this_monday, this_sunday, next_friday
+    return team_data, target_monday, target_friday, target_monday, this_sunday, next_friday
 
 def build_weekly_html(team_data, last_mon, last_fri, this_mon, this_sun, next_fri):
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
-    title_period = f"지난주 성과({last_mon.strftime('%m/%d')}~{last_fri.strftime('%m/%d')}) & 이번주 계획({this_mon.strftime('%m/%d')}~{this_sun.strftime('%m/%d')})"
+    title_period = f"이번주 주간 보고({last_mon.strftime('%m/%d')}~{last_fri.strftime('%m/%d')}) & 계획(~{next_fri.strftime('%m/%d')})"
 
-    # 동적으로 추출된 사용자 목록 중 '미지정'을 맨 뒤로 보내고 정렬
     sorted_members = sorted(team_data.keys(), key=lambda x: (x == "미지정", x))
 
     member_cards_html = ""
