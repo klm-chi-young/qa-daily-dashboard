@@ -115,6 +115,35 @@ def parse_date(date_str):
 def clean_sprint_str(val):
     return str(val).replace('"', '').replace("'", "").strip()
 
+# 📌 [핵심 개선] 진행자/담당자 다중 커스텀 필드 정밀 수집
+def extract_worker_names(issue):
+    workers = []
+    
+    if issue.fields.assignee and hasattr(issue.fields.assignee, 'displayName'):
+        workers.append(str(issue.fields.assignee.displayName))
+        
+    for attr in dir(issue.fields):
+        if attr.startswith('customfield_'):
+            val = getattr(issue.fields, attr, None)
+            if val:
+                if isinstance(val, dict) and 'displayName' in val:
+                    workers.append(str(val['displayName']))
+                elif isinstance(val, list):
+                    for elem in val:
+                        if isinstance(elem, dict) and 'displayName' in elem:
+                            workers.append(str(elem['displayName']))
+                        elif hasattr(elem, 'displayName'):
+                            workers.append(str(elem.displayName))
+                elif hasattr(val, 'displayName'):
+                    workers.append(str(val.displayName))
+                    
+    unique_workers = []
+    for w in workers:
+        if w and w not in unique_workers:
+            unique_workers.append(w)
+            
+    return unique_workers if unique_workers else ["미지정"]
+
 def get_team_dashboard_data():
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
@@ -139,7 +168,7 @@ def get_team_dashboard_data():
             'total_count': 0
         }
 
-    # 2. Jira 이슈 파싱 (f-string 내 백슬래시 제거 안전 처리)
+    # 2. Jira 이슈 파싱
     issues = []
     if JIRA_TOKEN:
         try:
@@ -164,28 +193,22 @@ def get_team_dashboard_data():
         print("⚠️ JIRA_API_TOKEN 환경 변수가 설정되어 있지 않아 Jira 조회를 건너뜁니다.")
 
     for i in issues:
-        assignee_raw = str(i.fields.assignee.displayName) if i.fields.assignee else "미지정"
+        workers = extract_worker_names(i)
+        workers_str = ", ".join(workers)
         status = i.fields.status.name
         
-        # 담당자 이름 매칭
-        matched_assignee = "미지정"
-        for t_name in TEAM_CALENDAR_EMAILS.keys():
-            if any(k in assignee_raw for k in ["리암", "김치영"]) and "리암" in t_name: matched_assignee = t_name; break
-            elif any(k in assignee_raw for k in ["베리", "강샛별"]) and "베리" in t_name: matched_assignee = t_name; break
-            elif any(k in assignee_raw for k in ["솔릭", "구건모"]) and "솔릭" in t_name: matched_assignee = t_name; break
-            elif any(k in assignee_raw for k in ["하퍼", "이하경"]) and "하퍼" in t_name: matched_assignee = t_name; break
+        # 📌 이슈에 연관된 모든 진행자를 팀원 카드에 개별 매칭
+        matched_members = []
+        for w_name in workers:
+            for t_name in TEAM_CALENDAR_EMAILS.keys():
+                if any(k in w_name for k in ["리암", "김치영"]) and "리암" in t_name: matched_members.append(t_name)
+                elif any(k in w_name for k in ["베리", "강샛별"]) and "베리" in t_name: matched_members.append(t_name)
+                elif any(k in w_name for k in ["솔릭", "구건모"]) and "솔릭" in t_name: matched_members.append(t_name)
+                elif any(k in w_name for k in ["하퍼", "이하경"]) and "하퍼" in t_name: matched_members.append(t_name)
 
-        if matched_assignee not in team_data:
-            if matched_assignee == "미지정":
-                team_data["미지정"] = {
-                    'today_meetings': [],
-                    'today_deploy': [],
-                    'today_progress': [],
-                    'tomorrow_plan': [],
-                    'next_week': [],
-                    'no_date': [],
-                    'total_count': 0
-                }
+        matched_members = list(set(matched_members))
+        if not matched_members:
+            matched_members = ["미지정"]
 
         start_date_str = get_field_value(i.fields, START_DATE_FIELDS)
         due_date_str = get_field_value(i.fields, DUE_DATE_FIELDS)
@@ -199,49 +222,62 @@ def get_team_dashboard_data():
             'key': i.key,
             'summary': i.fields.summary,
             'status': status,
+            'assignee': workers_str,
             'start_date': start_date_str or '미정',
             'due_date': due_date_str or '미정',
             'deploy_date': deploy_date_str or '미정',
             'link': f"{JIRA_SERVER}/browse/{i.key}"
         }
-        
-        if deploy_date and deploy_date == today:
-            team_data[matched_assignee]['today_deploy'].append(issue_info)
 
-        is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
+        for member_target in matched_members:
+            if member_target not in team_data:
+                team_data[member_target] = {
+                    'today_meetings': [],
+                    'today_deploy': [],
+                    'today_progress': [],
+                    'tomorrow_plan': [],
+                    'next_week': [],
+                    'no_date': [],
+                    'total_count': 0
+                }
 
-        if not is_done:
-            is_today_progress = False
-            if start_date and due_date and (start_date <= today <= due_date):
-                is_today_progress = True
-            elif start_date == today or due_date == today:
-                is_today_progress = True
+            if deploy_date and deploy_date == today:
+                team_data[member_target]['today_deploy'].append(issue_info)
 
-            if is_today_progress:
-                team_data[matched_assignee]['today_progress'].append(issue_info)
+            is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
 
-            is_tomorrow = False
-            if start_date == tomorrow or due_date == tomorrow:
-                is_tomorrow = True
-            elif start_date and due_date and (start_date <= tomorrow <= due_date):
-                is_tomorrow = True
+            if not is_done:
+                is_today_progress = False
+                if start_date and due_date and (start_date <= today <= due_date):
+                    is_today_progress = True
+                elif start_date == today or due_date == today:
+                    is_today_progress = True
 
-            if is_tomorrow:
-                team_data[matched_assignee]['tomorrow_plan'].append(issue_info)
+                if is_today_progress:
+                    team_data[member_target]['today_progress'].append(issue_info)
 
-            is_next_week = False
-            if (start_date and start_date >= next_week_start) or (due_date and due_date >= next_week_start):
-                is_next_week = True
+                is_tomorrow = False
+                if start_date == tomorrow or due_date == tomorrow:
+                    is_tomorrow = True
+                elif start_date and due_date and (start_date <= tomorrow <= due_date):
+                    is_tomorrow = True
 
-            if is_next_week:
-                team_data[matched_assignee]['next_week'].append(issue_info)
+                if is_tomorrow:
+                    team_data[member_target]['tomorrow_plan'].append(issue_info)
 
-            if not start_date and not due_date and not deploy_date:
-                team_data[matched_assignee]['no_date'].append(issue_info)
-            elif not is_today_progress and not is_tomorrow and not is_next_week and (deploy_date != today):
-                team_data[matched_assignee]['no_date'].append(issue_info)
+                is_next_week = False
+                if (start_date and start_date >= next_week_start) or (due_date and due_date >= next_week_start):
+                    is_next_week = True
 
-        team_data[matched_assignee]['total_count'] += 1
+                if is_next_week:
+                    team_data[member_target]['next_week'].append(issue_info)
+
+                if not start_date and not due_date and not deploy_date:
+                    team_data[member_target]['no_date'].append(issue_info)
+                elif not is_today_progress and not is_tomorrow and not is_next_week and (deploy_date != today):
+                    team_data[member_target]['no_date'].append(issue_info)
+
+            team_data[member_target]['total_count'] += 1
 
     print(f"✅ 총 {len(team_data)}개 담당 그룹 데이터 분류 완료!")
     return team_data, today, tomorrow, next_week_start
@@ -293,11 +329,15 @@ def build_html(team_data, today, tomorrow, next_start):
             for item in issue_list:
                 status_bg = "#dcfce7" if "완료" in item['status'] else "#e2e8f0"
                 status_color = "#15803d" if "완료" in item['status'] else "#475569"
+                assignee_display = item.get('assignee') or member
                 
                 html += f"""
                 <div style="background:#ffffff; border:1px solid #e2e8f0; padding:10px 12px; border-radius:8px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <a href="{item['link']}" target="_blank" style="font-weight:700; color:{badge_color}; text-decoration:none; font-size:12px;">{item['key']}</a>
+                        <div>
+                            <a href="{item['link']}" target="_blank" style="font-weight:700; color:{badge_color}; text-decoration:none; font-size:12px;">{item['key']}</a>
+                            <span style="background:#e2e8f0; color:#334155; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:6px;">👤 진행자: {assignee_display}</span>
+                        </div>
                         <span style="font-size:11px; background:{status_bg}; color:{status_color}; padding:2px 6px; border-radius:4px; font-weight:600;">{item['status']}</span>
                     </div>
                     <div style="font-size:13px; font-weight:600; color:#1e293b; margin-bottom:6px; line-height:1.3;">{item['summary']}</div>
@@ -457,3 +497,15 @@ if __name__ == "__main__":
         print(f"\n🎉 성공! 데일리 현황판이 생성되었습니다: {os.path.abspath(file_name)}")
     except Exception as e:
         print(f"\n❌ 오류 발생: {e}")
+
+def get_daily_html():
+    data, today, tomorrow, next_start = get_team_dashboard_data()
+    return build_html(data, today, tomorrow, next_start)
+
+def get_daily_dashboard_data():
+    try:
+        team_data, today, tomorrow, next_week_start = get_team_dashboard_data()
+        return team_data
+    except Exception as e:
+        print(f"❌ daily 데이터 가져오기 실패: {e}")
+        return {}
