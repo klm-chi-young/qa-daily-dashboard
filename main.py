@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from jira import JIRA
@@ -9,10 +10,10 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# 📌 스프린트 설정 (단일 ID 문자열 또는 리스트 형식 모두 지원)
+# 📌 스프린트 설정 (지라 API 자동 추출로 관리)
 CONFIG = {
-    "REPORT_MONTH": "2026년 8월",
-    "QART_SPRINT": ["6643", "6645"],
+    "REPORT_MONTH": "2026년 9월",
+    "QART_SPRINT": [], # 📌 지라 API 자동 추출로 전환 (빈값)
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
@@ -37,6 +38,39 @@ WEEKDAY_KOR = ['월요일', '화요일', '수요일', '목요일', '금요일', 
 
 KST = timezone(timedelta(hours=9))
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+
+def clean_sprint_str(s):
+    if isinstance(s, list):
+        return [str(item).strip("'\"[] ") for item in s]
+    return str(s).strip("'\"[] ")
+
+# 📌 지라 API를 통해 현재 활성화된(Active) 스프린트 ID를 자동 추출하는 함수
+def fetch_active_sprint_ids(jira, project_key="QART"):
+    try:
+        jql = f'project = "{project_key}" AND sprint in openSprints()'
+        issues = jira.enhanced_search_issues(jql, maxResults=20)
+        
+        active_sprint_ids = set()
+        for issue in issues:
+            raw_fields = issue.raw.get('fields', {})
+            for field_key, field_val in raw_fields.items():
+                if field_val and isinstance(field_val, list):
+                    for elem in field_val:
+                        if isinstance(elem, dict) and 'id' in elem and elem.get('state') == 'active':
+                            active_sprint_ids.add(str(elem['id']))
+                        elif isinstance(elem, str) and 'state=ACTIVE' in elem:
+                            match = re.search(r'id=(\d+)', elem)
+                            if match:
+                                active_sprint_ids.add(match.group(1))
+
+        if active_sprint_ids:
+            found_ids = list(active_sprint_ids)
+            print(f"✅ [{project_key}] 지라 활성 스프린트 ID 자동 추출 성공: {found_ids}")
+            return found_ids
+    except Exception as e:
+        print(f"⚠️ [{project_key}] 자동 스프린트 ID 조회 에러: {e}")
+
+    return []
 
 def get_calendar_service():
     creds = None
@@ -98,24 +132,21 @@ def get_field_value(issue_fields, field_id_list):
     for fid in field_id_list:
         val = getattr(issue_fields, fid, None)
         if val:
-            val_str = str(val)
+            val_str = str(val).strip()
             if 'T' in val_str:
                 val_str = val_str.split('T')[0]
-            return val_str
+            if len(val_str) >= 10:
+                return val_str[:10]
     return None
 
 def parse_date(date_str):
-    if not date_str:
+    if not date_str or str(date_str).strip() in ['미정', 'None', '', 'null']:
         return None
     try:
-        return datetime.strptime(date_str[:10], '%Y-%m-%d').date()
+        return datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
     except Exception:
         return None
 
-def clean_sprint_str(val):
-    return str(val).replace('"', '').replace("'", "").strip()
-
-# 📌 [핵심 개선] 진행자/담당자 다중 커스텀 필드 정밀 수집
 def extract_worker_names(issue):
     workers = []
     
@@ -144,6 +175,33 @@ def extract_worker_names(issue):
             
     return unique_workers if unique_workers else ["미지정"]
 
+def match_team_member(worker_name):
+    w = str(worker_name)
+    if any(k in w for k in ["리암", "김치영", "Liam", "cy.kim"]):
+        return "리암(Liam/김치영)"
+    elif any(k in w for k in ["베리", "강샛별", "Berry", "sb.kang"]):
+        return "베리(Berry/강샛별)"
+    elif any(k in w for k in ["솔릭", "구건모", "Solric", "gm.koo"]):
+        return "솔릭(Solric/구건모)"
+    elif any(k in w for k in ["하퍼", "이하경", "Harper", "hk.lee"]):
+        return "하퍼(Harper/이하경)"
+    return None
+
+def safe_search(jira, jql, name=""):
+    print(f"🔍 [{name}] JQL 실행: {jql}")
+    try:
+        issues = jira.enhanced_search_issues(jql, maxResults=100)
+        print(f"   └─ 결과: {len(issues)}건")
+        return issues
+    except Exception as e:
+        print(f"   └─ ❌ 예외 발생: {e}")
+
+    try:
+        issues = jira.search_issues(jql, maxResults=100)
+        return issues
+    except Exception:
+        return []
+
 def get_team_dashboard_data():
     today = datetime.now(KST).date()
     tomorrow = today + timedelta(days=1)
@@ -152,7 +210,7 @@ def get_team_dashboard_data():
 
     cal_service = get_calendar_service()
 
-    # 1. 팀원 기본 데이터 구조 생성
+    # 1. 지정 4명 팀원 전용 데이터 구조 생성
     team_data = {}
     for member_name, cal_email in TEAM_CALENDAR_EMAILS.items():
         read_email = 'primary' if "리암" in member_name or cal_email == JIRA_USER else cal_email
@@ -168,25 +226,23 @@ def get_team_dashboard_data():
             'total_count': 0
         }
 
-    # 2. Jira 이슈 파싱
+    # 2. Jira 이슈 파싱 (QART 전용 자동 스프린트)
     issues = []
     if JIRA_TOKEN:
         try:
             jira = JIRA({'server': JIRA_SERVER}, basic_auth=(JIRA_USER, JIRA_TOKEN))
             
-            sprints = CONFIG["QART_SPRINT"]
-            if isinstance(sprints, list):
-                sprint_ids = ", ".join([clean_sprint_str(s) for s in sprints])
-                sprint_jql = f"sprint in ({sprint_ids})"
-            else:
-                sprint_ids = clean_sprint_str(sprints)
-                sprint_jql = f"sprint = {sprint_ids}"
+            active_qart_sprints = fetch_active_sprint_ids(jira, "QART")
 
-            jql = f'project = "QART" AND {sprint_jql} ORDER BY created DESC'
-            print(f"🔍 [QART Sprint] JQL 실행: {jql}")
-            
-            issues = jira.enhanced_search_issues(jql, maxResults=False)
-            print(f"📦 [Jira 추출 완료]: 총 {len(issues)}개 이슈 파싱됨")
+            if active_qart_sprints:
+                sprint_ids = ", ".join(clean_sprint_str(active_qart_sprints))
+                main_jql = f'project = "QART" AND (sprint in ({sprint_ids}) OR sprint in openSprints()) ORDER BY created DESC'
+            else:
+                main_jql = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
+
+            issues = safe_search(jira, main_jql, "QART 메인")
+            print(f"📦 [Jira QART 추출 완료]: 총 {len(issues)}개 이슈 파싱 시작")
+
         except Exception as e:
             print(f"❌ Jira 연결/조회 에러: {e}")
     else:
@@ -197,18 +253,10 @@ def get_team_dashboard_data():
         workers_str = ", ".join(workers)
         status = i.fields.status.name
         
-        # 📌 이슈에 연관된 모든 진행자를 팀원 카드에 개별 매칭
-        matched_members = []
-        for w_name in workers:
-            for t_name in TEAM_CALENDAR_EMAILS.keys():
-                if any(k in w_name for k in ["리암", "김치영"]) and "리암" in t_name: matched_members.append(t_name)
-                elif any(k in w_name for k in ["베리", "강샛별"]) and "베리" in t_name: matched_members.append(t_name)
-                elif any(k in w_name for k in ["솔릭", "구건모"]) and "솔릭" in t_name: matched_members.append(t_name)
-                elif any(k in w_name for k in ["하퍼", "이하경"]) and "하퍼" in t_name: matched_members.append(t_name)
-
-        matched_members = list(set(matched_members))
+        # 지정된 4명 담당자 필터링
+        matched_members = list(set([m for m in [match_team_member(w) for w in workers] if m is not None]))
         if not matched_members:
-            matched_members = ["미지정"]
+            continue
 
         start_date_str = get_field_value(i.fields, START_DATE_FIELDS)
         due_date_str = get_field_value(i.fields, DUE_DATE_FIELDS)
@@ -231,15 +279,7 @@ def get_team_dashboard_data():
 
         for member_target in matched_members:
             if member_target not in team_data:
-                team_data[member_target] = {
-                    'today_meetings': [],
-                    'today_deploy': [],
-                    'today_progress': [],
-                    'tomorrow_plan': [],
-                    'next_week': [],
-                    'no_date': [],
-                    'total_count': 0
-                }
+                continue
 
             if deploy_date and deploy_date == today:
                 team_data[member_target]['today_deploy'].append(issue_info)
@@ -247,35 +287,53 @@ def get_team_dashboard_data():
             is_done = status in DONE_STATUSES or any(k in status for k in ['완료', 'Done', 'Closed'])
 
             if not is_done:
+                has_any_date = (start_date is not None) or (due_date is not None) or (deploy_date is not None)
+                assigned_category = False
+
+                # 1. 오늘 진행 중
                 is_today_progress = False
                 if start_date and due_date and (start_date <= today <= due_date):
                     is_today_progress = True
-                elif start_date == today or due_date == today:
+                elif start_date and start_date <= today:
+                    is_today_progress = True
+                elif due_date and due_date == today:
                     is_today_progress = True
 
                 if is_today_progress:
                     team_data[member_target]['today_progress'].append(issue_info)
+                    assigned_category = True
 
+                # 2. 내일 진행 예정
                 is_tomorrow = False
-                if start_date == tomorrow or due_date == tomorrow:
+                if start_date and start_date == tomorrow:
+                    is_tomorrow = True
+                elif due_date and due_date == tomorrow:
                     is_tomorrow = True
                 elif start_date and due_date and (start_date <= tomorrow <= due_date):
                     is_tomorrow = True
 
-                if is_tomorrow:
+                if is_tomorrow and not assigned_category:
                     team_data[member_target]['tomorrow_plan'].append(issue_info)
+                    assigned_category = True
 
+                # 3. 다음 주 예정 업무
                 is_next_week = False
                 if (start_date and start_date >= next_week_start) or (due_date and due_date >= next_week_start):
                     is_next_week = True
 
-                if is_next_week:
+                if is_next_week and not assigned_category:
                     team_data[member_target]['next_week'].append(issue_info)
+                    assigned_category = True
 
-                if not start_date and not due_date and not deploy_date:
-                    team_data[member_target]['no_date'].append(issue_info)
-                elif not is_today_progress and not is_tomorrow and not is_next_week and (deploy_date != today):
-                    team_data[member_target]['no_date'].append(issue_info)
+                # 4. 날짜 유무별 예외 처리
+                if not has_any_date or not assigned_category:
+                    if not has_any_date:
+                        team_data[member_target]['no_date'].append(issue_info)
+                    elif not assigned_category:
+                        if (start_date and start_date > today) or (due_date and due_date > today):
+                            team_data[member_target]['next_week'].append(issue_info)
+                        else:
+                            team_data[member_target]['today_progress'].append(issue_info)
 
             team_data[member_target]['total_count'] += 1
 
