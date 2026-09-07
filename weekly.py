@@ -6,16 +6,17 @@ from datetime import datetime, timedelta, date
 from jira import JIRA
 
 # ==========================================
-# 1. 설정 정보
+# 1. 설정 정보 (자동 추출이 기본이므로 빈 값으로 관리)
 # ==========================================
 CONFIG = {
-    "QART_SPRINT": ["6643", "6645"],  # QART 기본 스프린트 ID
-    "HOTFIX_SPRINT": "6741",         # QA 프로젝트 핫픽스 스프린트 ID (월별 변경)
+    "QART_SPRINT": [],   # 📌 지라 API 자동 추출로 전환 (빈값)
+    "HOTFIX_SPRINT": []  # 📌 지라 API 자동 추출로 전환 (빈값)
 }
 
 JIRA_SERVER = 'https://pet-friends.atlassian.net'
 JIRA_USER = os.getenv('JIRA_USER', 'cy.kim2@pet-friends.co.kr')
-JIRA_TOKEN = os.getenv('JIRA_API_TOKEN')
+DEFAULT_JIRA_TOKEN = 'ATATT3xFfGF0LSiuuSshdZelOzxoIZR9yD3AUMqFzLvs9nXB7rvSGta9e6ZCN1C28WeWaiBz2qYJ99JOnMRjXx0_H6RcdOmeOp4Y_TfUkgISVjIJTou_qlQgMlNHPu8UxVRH4c3XOfIRUIO9jqNf22S_8DJvjtbxGeeSTv_L-ayzgUfiy9awCIc=424E6624'
+JIRA_TOKEN = os.getenv('JIRA_API_TOKEN', DEFAULT_JIRA_TOKEN)
 
 START_DATE_FIELDS = ['customfield_10015', 'customfield_10071', 'customfield_10145', 'customfield_10085', 'customfield_10115', 'customfield_10137']
 DUE_DATE_FIELDS = ['duedate', 'customfield_10061', 'customfield_10083']
@@ -27,7 +28,37 @@ IN_PROGRESS_STATUSES = ['QA 진행중', 'QA 진행 중', 'TC 작성중', 'TC 작
 PLANNED_STATUSES = ['Request List', 'TC 작성완료', 'TC 작성 완료', 'To Do', 'Backlog']
 
 def clean_sprint_str(val):
+    if isinstance(val, list):
+        return [str(item).strip("'\"[] ") for item in val]
     return str(val).replace('"', '').replace("'", "").strip()
+
+# 📌 지라 API를 통해 현재 활성화된(Active) 스프린트 ID를 자동 추출하는 함수
+def fetch_active_sprint_ids(jira, project_key="QART"):
+    try:
+        jql = f'project = "{project_key}" AND sprint in openSprints()'
+        issues = jira.enhanced_search_issues(jql, maxResults=20)
+        
+        active_sprint_ids = set()
+        for issue in issues:
+            raw_fields = issue.raw.get('fields', {})
+            for field_key, field_val in raw_fields.items():
+                if field_val and isinstance(field_val, list):
+                    for elem in field_val:
+                        if isinstance(elem, dict) and 'id' in elem and elem.get('state') == 'active':
+                            active_sprint_ids.add(str(elem['id']))
+                        elif isinstance(elem, str) and 'state=ACTIVE' in elem:
+                            match = re.search(r'id=(\d+)', elem)
+                            if match:
+                                active_sprint_ids.add(match.group(1))
+
+        if active_sprint_ids:
+            found_ids = list(active_sprint_ids)
+            print(f"✅ [{project_key}] 지라 활성 스프린트 ID 자동 추출 성공: {found_ids}")
+            return found_ids
+    except Exception as e:
+        print(f"⚠️ [{project_key}] 자동 스프린트 ID 조회 에러: {e}")
+
+    return []
 
 def get_field_value(issue_fields, field_id_list):
     for fid in field_id_list:
@@ -136,33 +167,32 @@ def get_weekly_dashboard_data():
 
     today = datetime.now().date()
     
-    # 📌 [새로운 날짜 기준일 설정: 화요일 ~ 차주 월요일]
-    # 오늘(화요일)부터 차주 월요일까지 계산
-    # 요일 코드: 월=0, 화=1, 수=2, 목=3, 금=4, 토=5, 일=6
     offset_to_tuesday = (today.weekday() - 1) % 7
-    target_tuesday = today - timedelta(days=offset_to_tuesday)   # 가장 최근 화요일 (9/1)
-    target_next_monday = target_tuesday + timedelta(days=6)      # 차주 월요일 (9/7)
+    target_tuesday = today - timedelta(days=offset_to_tuesday)
+    target_next_monday = target_tuesday + timedelta(days=6)
     
-    # 진행 예정 마감일 (~ 다다음주 금요일 9/11)
     this_monday = today - timedelta(days=today.weekday())
     next_friday = this_monday + timedelta(days=11)
 
-    # 1. 메인 QART 프로젝트 JQL
-    sprints = CONFIG["QART_SPRINT"]
-    if isinstance(sprints, list):
-        sprint_ids = ", ".join([clean_sprint_str(s) for s in sprints])
-        sprint_condition = f"sprint in ({sprint_ids})"
-    else:
-        sprint_ids = clean_sprint_str(sprints)
-        sprint_condition = f"sprint = {sprint_ids}"
+    # 📌 지라 API로 실시간 활성 스프린트 ID 자동 추출
+    active_qart_sprints = fetch_active_sprint_ids(jira, "QART")
+    active_qa_sprints = fetch_active_sprint_ids(jira, "QA")
 
-    main_jql = f'project = "QART" AND ({sprint_condition} OR sprint in openSprints()) ORDER BY created DESC'
+    # 1. 메인 QART 프로젝트 JQL
+    if active_qart_sprints:
+        sprint_ids = ", ".join(clean_sprint_str(active_qart_sprints))
+        main_jql = f'project = "QART" AND (sprint in ({sprint_ids}) OR sprint in openSprints()) ORDER BY created DESC'
+    else:
+        main_jql = 'project = "QART" AND sprint in openSprints() ORDER BY created DESC'
     
     # 2. QA 프로젝트 핫픽스 전용 JQL
-    hotfix_sprint = clean_sprint_str(CONFIG["HOTFIX_SPRINT"])
-    hotfix_jql = f'project = "QA" AND sprint = {hotfix_sprint}'
+    if active_qa_sprints:
+        hotfix_ids = ", ".join(clean_sprint_str(active_qa_sprints))
+        hotfix_jql = f'project = "QA" AND sprint in ({hotfix_ids})'
+    else:
+        hotfix_jql = 'project = "QA" AND sprint in openSprints()'
 
-    # 3. 버그 이슈 전용 JQL (화요일 ~ 차주 월요일 사이 작성된 버그만)
+    # 3. 버그 이슈 전용 JQL
     bug_jql = f'project in ("QART", "QA") AND type = Bug AND created >= "{target_tuesday.strftime("%Y-%m-%d")}" AND created <= "{target_next_monday.strftime("%Y-%m-%d")}" ORDER BY created DESC'
 
     print(f"🔍 [QART 메인 JQL 실행]: {main_jql}")
@@ -253,7 +283,7 @@ def get_weekly_dashboard_data():
         is_qa_done = status in QA_DONE_STATUSES
         is_in_progress_status = status in IN_PROGRESS_STATUSES
 
-        # 📌 1) 버그/이슈티켓 (Bug): 화요일 ~ 차주 월요일 사이 작성된 건만 매칭
+        # 📌 1) 버그/이슈티켓 (Bug)
         if is_bug:
             ensure_person(reporter_name)
             if created_date and (target_tuesday <= created_date <= target_next_monday):
@@ -261,26 +291,24 @@ def get_weekly_dashboard_data():
                     team_data[reporter_name]['bugs'].append(issue_info)
             continue
 
-        # 📌 2) 핫픽스 (Hotfix): QA 프로젝트 보고자(Reporter) 기준 매칭
+        # 📌 2) 핫픽스 (Hotfix)
         if is_hotfix:
             ensure_person(reporter_name)
             if issue_info not in team_data[reporter_name]['hotfixes']:
                 team_data[reporter_name]['hotfixes'].append(issue_info)
             continue
 
-        # 📌 3) 1~3번 일반 스프린트 이슈: 담당자(Assignee) / 참여자 기준 매칭
+        # 📌 3) 1~3번 일반 스프린트 이슈
         workers = find_assignee_and_participants(jira, i)
         for person in workers:
             ensure_person(person)
             if is_deploy_done or is_qa_done:
-                # 🎯 화요일 ~ 차주 월요일 사이 배포/완료된 건만 1. 완료에 포함
                 check_finish_date = deploy_date or due_date or updated_date
                 if check_finish_date and (target_tuesday <= check_finish_date <= target_next_monday):
                     if issue_info not in team_data[person]['completed_last_week']:
                         team_data[person]['completed_last_week'].append(issue_info)
 
             elif is_in_progress_status:
-                # 🎯 화요일 ~ 차주 월요일 사이 활동(작성일/업데이트일)된 진행 중 건만 포함
                 check_active_date = updated_date or created_date
                 if check_active_date and (target_tuesday <= check_active_date <= target_next_monday):
                     if issue_info not in team_data[person]['in_progress']:
@@ -324,10 +352,10 @@ def build_weekly_html(team_data, target_tue, target_next_mon, this_mon, this_sun
             for item in issue_list:
                 sec_md += f"- **[{item['summary']}]({item['link']})** `{item['badge_label']} : {item['date_str']}`\n"
                 if item.get('is_hotfix'):
-                    sec_md += f"  - 사유\n"
-                    sec_md += f"    - 이슈원인 : {item.get('cause', '')}\n"
-                    sec_md += f"    - 대응 : {item.get('action', '')}\n"
-                    sec_md += f"    - TC존재여부 : {item.get('tc_exists', '')}\n"
+                    sec_md += f"    - 사유\n"
+                    sec_md += f"      - 이슈원인 : {item.get('cause', '')}\n"
+                    sec_md += f"      - 대응 : {item.get('action', '')}\n"
+                    sec_md += f"      - TC존재여부 : {item.get('tc_exists', '')}\n"
             sec_md += "\n"
             return sec_md
 
@@ -487,4 +515,4 @@ if __name__ == "__main__":
 
 def get_weekly_html():
     data, t_tue, t_nmon, t_mon, t_sun, n_fri = get_weekly_dashboard_data()
-    return build_weekly_html(data, t_tue, t_nmon, t_sun, n_fri)
+    return build_weekly_html(data, t_tue, t_nmon, t_mon, t_sun, n_fri)
