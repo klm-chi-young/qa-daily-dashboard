@@ -23,7 +23,7 @@
             <div class="header">
                 <div>
                     <div class="title">📋 QART 팀 주간 회의록</div>
-                    <div class="sub">이번주 주간 보고(09/01~09/07) & 계획(~09/18) | 생성시각: 2026-09-07 07:04</div>
+                    <div class="sub">이번주 주간 보고(09/01~09/07) & 계획(~09/18) | 생성시각: 2026-09-07 23:43</div>
                 </div>
                 <button class="copy-btn" id="btn_notionFullText" onclick="copyTextToClipboard('notionFullText', 'btn_notionFullText')">📋 팀 전체 복사</button>
             </div>
@@ -35,6 +35,25 @@
                 <button class="member-copy-btn" id="btn_memberText_0" onclick="copyTextToClipboard('memberText_0', 'btn_memberText_0')">📋 리암(Liam/ 김치영)님 목록 복사 (이름 제외)</button>
             </div>
 
+            
+            <div style="margin-bottom:14px; background:#fef2f2; border:1px solid #fca5a5; padding:12px; border-radius:8px;">
+                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    🔥 Hotfix (1건)
+                </div>
+                <ul style='margin-left:20px; font-size:13px; line-height:1.8; color:#334155;'><li style='margin-bottom:8px;'>
+                    <a href='https://pet-friends.atlassian.net/browse/QA-6039' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>핫픽스 테스트</a>
+                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>해야 할 일</span>
+                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 미정</span>
+                    
+                    <div style='background:#fff5f5; border-left:3px solid #ef4444; padding:8px 12px; margin-top:6px; font-size:12px; border-radius:0 6px 6px 0; color:#475569;'>
+                        <div style='font-weight:700; color:#b91c1c; margin-bottom:2px;'>사유</div>
+                        <div>• 이슈원인 : test</div>
+                        <div>• 대응 : test1</div>
+                        <div>• TC존재여부 : test2</div>
+                    </div>
+                    
+                </li></ul>
+            </div>
             
 
             <div style="margin-bottom:14px;">
@@ -107,7 +126,14 @@
                 <div style='color:#94a3b8; font-size:13px;'>- 없음</div>
             </div>
 
-            <textarea id="memberText_0" style="display:none;">**1. 완료 (8건)**
+            <textarea id="memberText_0" style="display:none;">**Hotfix (1건) (1건)**
+- **[핫픽스 테스트](https://pet-friends.atlassian.net/browse/QA-6039)** `배포 예정일 : 미정`
+    - 사유
+      - 이슈원인 : test
+      - 대응 : test1
+      - TC존재여부 : test2
+
+**1. 완료 (8건)**
 - **[[모바일] 상품상세 캡차 커스텀 페이지 적용](https://pet-friends.atlassian.net/browse/QART-2292)** `배포일 : 9/1`
 - **[[판매자어드민] 업체배송 상품 등록 시 타입/속성 정보 제한](https://pet-friends.atlassian.net/browse/QART-2286)** `배포일 : 9/1`
 - **[[모바일] 커뮤니티 게시글 상세 잘못된 postId 진입 방어 가드 추가](https://pet-friends.atlassian.net/browse/QART-2297)** `배포일 : 9/2`
@@ -362,56 +388,8 @@
         
         <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #f1f5f9; margin-bottom:14px;">
-                <div style="font-size:18px; font-weight:700; color:#0f172a;">👤 콜벤(Colven/김종훈)</div>
-                <button class="member-copy-btn" id="btn_memberText_3" onclick="copyTextToClipboard('memberText_3', 'btn_memberText_3')">📋 콜벤(Colven/김종훈)님 목록 복사 (이름 제외)</button>
-            </div>
-
-            
-
-            <div style="margin-bottom:14px;">
-                <div style="font-size:14px; font-weight:700; color:#16a34a; margin-bottom:6px;">1. 완료 (0건)</div>
-                <div style='color:#94a3b8; font-size:13px;'>- 없음</div>
-            </div>
-
-            <div style="margin-bottom:14px;">
-                <div style="font-size:14px; font-weight:700; color:#dc2626; margin-bottom:6px;">2. 진행 중 (0건)</div>
-                <div style='color:#94a3b8; font-size:13px;'>- 없음</div>
-            </div>
-
-            <div style="margin-bottom:14px;">
-                <div style="font-size:14px; font-weight:700; color:#4f46e5; margin-bottom:6px;">3. 진행 예정 (1건, ~09/18 금)</div>
-                <ul style='margin-left:20px; font-size:13px; line-height:1.8; color:#334155;'><li style='margin-bottom:8px;'>
-                    <a href='https://pet-friends.atlassian.net/browse/QART-2300' target='_blank' style='color:#2563eb; font-weight:700; text-decoration:underline;'>[모바일] 디자인시스템 > EmptyState 결과값이 없는 화면 통일 작업 - 포스트오더</a>
-                    <span style='background:#f1f5f9; color:#475569; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:4px;'>Request List</span>
-                    <span style='background:#fee2e2; color:#dc2626; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;'>배포 예정일 : 9/14</span>
-                    
-                </li></ul>
-            </div>
-
-            <div>
-                <div style="font-size:14px; font-weight:700; color:#d97706; margin-bottom:6px;">4. 이슈 (0건)</div>
-                <div style='color:#94a3b8; font-size:13px;'>- 없음</div>
-            </div>
-
-            <textarea id="memberText_3" style="display:none;">**1. 완료 (0건)**
-- 없음
-
-**2. 진행중 (0건)**
-- 없음
-
-**3. 진행예정 (~09/18) (1건)**
-- **[[모바일] 디자인시스템 > EmptyState 결과값이 없는 화면 통일 작업 - 포스트오더](https://pet-friends.atlassian.net/browse/QART-2300)** `배포 예정일 : 9/14`
-
-**4. 이슈 (0건)**
-- 없음
-
-</textarea>
-        </div>
-        
-        <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; padding:20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:2px solid #f1f5f9; margin-bottom:14px;">
                 <div style="font-size:18px; font-weight:700; color:#0f172a;">👤 하퍼(Harper/이하경)</div>
-                <button class="member-copy-btn" id="btn_memberText_4" onclick="copyTextToClipboard('memberText_4', 'btn_memberText_4')">📋 하퍼(Harper/이하경)님 목록 복사 (이름 제외)</button>
+                <button class="member-copy-btn" id="btn_memberText_3" onclick="copyTextToClipboard('memberText_3', 'btn_memberText_3')">📋 하퍼(Harper/이하경)님 목록 복사 (이름 제외)</button>
             </div>
 
             
@@ -456,7 +434,7 @@
                 </li></ul>
             </div>
 
-            <textarea id="memberText_4" style="display:none;">**1. 완료 (1건)**
+            <textarea id="memberText_3" style="display:none;">**1. 완료 (1건)**
 - **[[HQ/모바일] cmcs-139 롤아웃 코드 제거 (할인탭/썸네일 배지)](https://pet-friends.atlassian.net/browse/QART-2177)** `배포일 : 9/2`
 
 **2. 진행중 (0건)**
@@ -477,6 +455,13 @@
         <textarea id="notionFullText" style="display:none;">📋 QART 팀 주간 회의록 (이번주 주간 보고(09/01~09/07) & 계획(~09/18))
 
 👤 리암(Liam/ 김치영)
+**Hotfix (1건) (1건)**
+- **[핫픽스 테스트](https://pet-friends.atlassian.net/browse/QA-6039)** `배포 예정일 : 미정`
+    - 사유
+      - 이슈원인 : test
+      - 대응 : test1
+      - TC존재여부 : test2
+
 **1. 완료 (8건)**
 - **[[모바일] 상품상세 캡차 커스텀 페이지 적용](https://pet-friends.atlassian.net/browse/QART-2292)** `배포일 : 9/1`
 - **[[판매자어드민] 업체배송 상품 등록 시 타입/속성 정보 제한](https://pet-friends.atlassian.net/browse/QART-2286)** `배포일 : 9/1`
@@ -538,19 +523,6 @@
 - **[[모바일] 등급별 포인트 적립률 2차 실험 실험키 생성](https://pet-friends.atlassian.net/browse/QART-2304)** `배포 예정일 : 9/14`
 - **[[모바일] 디자인시스템 > EmptyState 결과값이 없는 화면 통일 작업 - 포스트오더](https://pet-friends.atlassian.net/browse/QART-2300)** `배포 예정일 : 9/14`
 - **[[검색] 처방식 > 색인서비스 상용 선 배포](https://pet-friends.atlassian.net/browse/QART-2293)** `배포 예정일 : 미정`
-
-**4. 이슈 (0건)**
-- 없음
-
-👤 콜벤(Colven/김종훈)
-**1. 완료 (0건)**
-- 없음
-
-**2. 진행중 (0건)**
-- 없음
-
-**3. 진행예정 (~09/18) (1건)**
-- **[[모바일] 디자인시스템 > EmptyState 결과값이 없는 화면 통일 작업 - 포스트오더](https://pet-friends.atlassian.net/browse/QART-2300)** `배포 예정일 : 9/14`
 
 **4. 이슈 (0건)**
 - 없음
